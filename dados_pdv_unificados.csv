@@ -1,0 +1,47 @@
+[PRODUTOS]
+"Nome do Produto";"Custo Individual (R$)";"Custo Frete (R$)";"Quantidade em Estoque";"Markup Sugerido";"Preço Venda Sugerido (R$)";"Preço Venda Real (R$)"
+"Bracelete Folha";10,35;0,00;1;2,99;30,90;20,00
+"Argola quadrada";8,00;0,00;1;2,99;23,89;25,00
+"Aliança Aço Inox 18";11,64;0,00;2;2,99;34,76;40,00
+"Anel Solitário em Aço Inox";7,41;0,00;1;2,99;22,12;30,00
+"Colar Aço Inox Letra";7,01;0,00;3;2,99;20,93;30,00
+"Colar corrente";5,84;0,00;1;2,99;17,44;20,00
+"Trio de brinco esfera";12,42;0,00;1;2,99;37,08;30,00
+"Brico argola texturizada Aço";6,69;0,00;1;2,99;19,98;25,00
+"Brinco coração Aço";6,69;0,00;1;2,99;19,98;25,00
+"Conjunto coração vazado Aço";11,69;0,00;1;2,99;34,90;40,00
+"Brinco coração P Aço";4,68;0,00;1;2,99;13,97;25,00
+"Brinco Cruz Aço";4,68;0,00;1;2,99;13,97;25,00
+"Colar duplo Aço";19,89;0,00;1;2,99;59,39;40,00
+"Colar semijoia Pai Nosso";19,75;0,00;1;2,99;58,97;60,00
+"Colar semijoia Quebra-Cabeça";25,36;0,00;1;2,99;75,72;80,00
+"Brinco Melancia cravejado";11,50;0,00;1;2,99;34,34;30,00
+"Piranha metal coração";8,78;0,00;1;2,99;26,22;20,00
+
+[VENDAS]
+"Nome Produto";"Quantidade Vendida";"Preço Venda Real por Unidade (R$)";"Preço Total Venda Real (R$)";"Custo Unidade na Venda (R$)";"Preço Sugerido por Unidade na Venda (R$)";"Preço Total Sugerido na Venda (R$)";"Data Venda";"ID da Transação"
+
+[MOVIMENTACOES_CAIXA]
+"ID";"Data";"Tipo";"Descrição";"Valor (R$)"
+
+[CAPITAL_DE_GIRO_ATIVOS]
+"Descrição";"Valor (R$)"
+"Contas a Receber";0,00
+
+[CAPITAL_DE_GIRO_PASSIVOS]
+"Descrição";"Valor (R$)"
+"Contas a Pagar";0,00
+
+[MARKUP_DATA]
+"Receita Mensal Estimada (R$)";830,00
+"Margem de Lucro Desejada (%)";15,00
+Despesas Variaveis Detalhadas;
+"Sacola Luisa";0,17
+"Adesivos";0,35
+Despesas Fixas Detalhadas;
+"Aluguel";80,00
+"MEI";82,00
+"Gasolina";50,00
+"Prolabore";200,00
+"Internet";15,00
+
