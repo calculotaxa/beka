@@ -1,0 +1,3185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de PDV Completo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+            overflow-x: hidden; /* Evita rolagem horizontal quando o menu está aberto */
+        }
+        /* Estilos para o menu lateral */
+        .sidebar {
+            width: 250px;
+            background-color: #1a202c; /* Darker background for the sidebar */
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100%;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1000;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+            padding-top: 4rem; /* Espaço para o cabeçalho */
+        }
+        .sidebar.open {
+            transform: translateX(0);
+        }
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 999;
+            display: none;
+        }
+        .sidebar-overlay.open {
+            display: block;
+        }
+        .menu-item {
+            display: block;
+            padding: 1rem 1.5rem;
+            color: #cbd5e0; /* Light gray text */
+            font-weight: 500;
+            text-decoration: none;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .menu-item:hover {
+            background-color: #2d3748; /* Slightly lighter on hover */
+        }
+        .menu-item.active {
+            background-color: #4a5568; /* Active item background */
+            color: #ffffff;
+        }
+        /* Estilos para o botão de hambúrguer */
+        .hamburger-button {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 1001; /* Acima do menu e do cabeçalho */
+            background-color: #3182ce; /* Blue background */
+            padding: 0.75rem;
+            border-radius: 9999px; /* Fully rounded */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background-color 0.3s ease-in-out;
+        }
+        .hamburger-button:hover {
+            background-color: #2b6cb0; /* Darker blue on hover */
+        }
+        .hamburger-icon {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+        .hamburger-icon span {
+            display: block;
+            height: 3px;
+            width: 100%;
+            background-color: white;
+            border-radius: 2px;
+            transition: all 0.3s ease-in-out;
+        }
+        /* Animação do ícone de hambúrguer para X */
+        .hamburger-icon.open span:nth-child(1) {
+            transform: translateY(10px) rotate(45deg);
+        }
+        .hamburger-icon.open span:nth-child(2) {
+            opacity: 0;
+        }
+        .hamburger-icon.open span:nth-child(3) {
+            transform: translateY(-10px) rotate(-45deg);
+        }
+        /* Estilos para alternar visibilidade das calculadoras */
+        .calculator-section {
+            display: none;
+        }
+        .calculator-section.active {
+            display: block;
+        }
+        /* Estilos para o modal de confirmação */
+        .confirmation-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+        }
+        .confirmation-modal-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+        .confirmation-modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            transform: translateY(-20px);
+            transition: transform 0.3s ease-in-out;
+        }
+        .confirmation-modal-overlay.open .confirmation-modal-content {
+            transform: translateY(0);
+        }
+        /* Estilos para o cabeçalho fixo */
+        .main-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: #1a202c; /* Mesma cor do sidebar para consistência */
+            color: white;
+            padding: 1rem; /* Vertical padding */
+            padding-left: 5rem; /* Espaço para o botão de hambúrguer */
+            z-index: 100;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            min-height: 5rem; /* Altura mínima para o cabeçalho */
+        }
+
+        /* Ajustes para o modal de vendas */
+        #salesEntryModalOverlay .confirmation-modal-content {
+            max-width: 600px; /* Aumenta a largura para o carrinho */
+            text-align: left;
+            max-height: 90vh; /* Limita a altura do modal a 90% da viewport height */
+            overflow-y: auto; /* Adiciona rolagem vertical se o conteúdo exceder a altura */
+            display: flex; /* Usa flexbox para organizar o conteúdo */
+            flex-direction: column; /* Coloca os itens em coluna */
+        }
+
+        /* Estilos para os botões de recolher/expandir seções */
+        .toggle-section-btn.collapsed svg {
+            transform: rotate(-90deg); /* Gira para a esquerda quando recolhido */
+        }
+        .section-content.hidden {
+            display: none;
+        }
+
+        /* Estilos para a barra de progresso */
+        .progress-bar-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 9999px;
+            overflow: hidden;
+            height: 1.5rem; /* Altura da barra */
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background-color: #4CAF50; /* Cor verde */
+            width: 0%;
+            border-radius: 9999px;
+            transition: width 0.5s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.875rem; /* text-sm */
+        }
+        .progress-bar-text-outside {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            color: #333; /* Cor do texto fora da barra */
+            font-weight: bold;
+            font-size: 0.875rem; /* text-sm */
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3182ce;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <!-- Cabeçalho Principal com Título Dinâmico e Botões de Ação -->
+    <header class="main-header">
+        <h1 id="pageTitle" class="text-xl font-bold text-white ml-4"></h1> <!-- Título da página dinâmico -->
+        <div class="flex items-center gap-2 ml-auto"> <!-- ml-auto empurra este div para a direita -->
+            <button id="exportAllDataBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                Exportar Planilha
+            </button>
+            <input type="file" id="importAllDataFile" accept=".csv" class="hidden">
+            <button id="importAllDataBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                Importar Planilha
+            </button>
+            <button id="salesModalBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                Nova Venda
+            </button>
+            <div id="importSheetsLoadingIndicator" class="spinner hidden"></div>
+        </div>
+    </header>
+
+    <!-- Botão de Hambúrguer -->
+    <button id="hamburgerBtn" class="hamburger-button">
+        <div class="hamburger-icon">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </button>
+
+    <!-- Overlay do Menu Lateral -->
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
+    <!-- Menu Lateral -->
+    <nav id="sidebar" class="sidebar">
+        <ul class="list-none p-0 m-0">
+            <li><a href="#" id="linkMarkup" class="menu-item active" data-calculator="markup">Calculadora de Markup Multiplicador</a></li>
+            <li><a href="#" id="linkSellingPrice" class="menu-item" data-calculator="sellingPrice">Gestão de Produtos e Vendas</a></li>
+            <li><a href="#" id="linkCashControl" class="menu-item" data-calculator="cashControl">Controle de Caixa</a></li>
+            <li><a href="#" id="linkWorkingCapital" class="menu-item" data-calculator="workingCapital">Capital de Giro</a></li>
+            <li><a href="#" id="linkReport" class="menu-item" data-calculator="report">Relatório Geral</a></li>
+        </ul>
+    </nav>
+
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full md:max-w-4xl lg:max-w-6xl xl:max-w-7xl">
+        <!-- Calculadora de Markup Multiplicador -->
+        <div id="markupCalculatorSection" class="calculator-section active">
+            <!-- Seção 1: Receita Mensal Estimada -->
+            <div class="mb-6 p-4 border border-blue-200 rounded-lg bg-blue-50">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">1. Receita Mensal Estimada</h2>
+                <div class="mb-0">
+                    <label for="totalMonthlyRevenue" class="block text-gray-700 text-sm font-semibold mb-2">Receita Mensal Total Estimada (R$):</label>
+                    <input type="number" id="totalMonthlyRevenue" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: 10000.00">
+                </div>
+            </div>
+
+            <!-- Nova Seção 2: Despesas Variáveis Detalhadas -->
+            <div class="mb-6 p-4 border border-yellow-200 rounded-lg bg-yellow-50">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">2. Despesas Variáveis Detalhadas (R$)</h2>
+                <div id="variableExpensesList" class="mb-4">
+                    <!-- Despesas variáveis serão adicionadas aqui dinamicamente -->
+                </div>
+                <button type="button" id="addVariableExpenseBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    Adicionar Despesa Variável
+                </button>
+                <div class="mt-4 pt-4 border-t border-gray-300">
+                    <label for="totalVariableExpensesAmount" class="block text-gray-700 text-sm font-semibold mb-2">Total de Despesas Variáveis Mensais (R$):</label>
+                    <input type="number" id="totalVariableExpensesAmount" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+            </div>
+
+            <!-- Seção 3: Despesas Fixas Detalhadas -->
+            <div class="mb-6 p-4 border border-green-200 rounded-lg bg-green-50">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">3. Despesas Fixas Detalhadas (R$)</h2>
+                <div id="fixedExpensesList" class="mb-4">
+                    <!-- Despesas fixas serão adicionadas aqui dinamicamente -->
+                </div>
+                <button type="button" id="addFixedExpenseBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    Adicionar Despesa Fixa
+                </button>
+                <div class="mt-4 pt-4 border-t border-gray-300">
+                    <label for="totalFixedExpensesAmount" class="block text-gray-700 text-sm font-semibold mb-2">Total de Despesas Fixas Mensais (R$):</label>
+                    <input type="number" id="totalFixedExpensesAmount" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight bg-gray-100 cursor-not-allowed" readonly>
+                </div>
+            </div>
+
+            <!-- Seção 4: Margem de Lucro e Cálculo do Markup -->
+            <div class="mb-6 p-4 border border-purple-200 rounded-lg bg-purple-50">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">4. Margem de Lucro e Cálculo</h2>
+                <div class="mb-6">
+                    <label for="profitMargin" class="block text-gray-700 text-sm font-semibold mb-2">Margem de Lucro Desejada (%):</label>
+                    <input type="number" id="profitMargin" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: 25">
+                </div>
+
+                <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mb-4">
+                    <input type="file" id="importMarkupFile" accept=".csv" class="hidden">
+                    <button id="importMarkupBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                        Importar Markup da Planilha
+                    </button>
+                    <button id="clearMarkupDataBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                        Limpar Dados do Markup
+                    </button>
+                </div>
+
+                <div id="markupResults" class="mt-6 p-4 bg-blue-100 rounded-lg border border-blue-300 hidden">
+                    <p class="text-gray-800 text-lg mb-2"><span class="font-semibold">Despesas Variáveis (%):</span> <span id="variableExpensesPercentage" class="text-blue-700 font-bold"></span></p>
+                    <p class="text-gray-800 text-lg mb-2"><span class="font-semibold">Despesas Fixas (%):</span> <span id="fixedExpensesPercentage" class="text-blue-700 font-bold"></span></p>
+                    <p class="text-800 text-lg"><span class="font-semibold">Markup Multiplicador:</span> <span id="markupResult" class="text-blue-700 font-bold"></span></p>
+                    
+                    <div id="calculationLogic" class="mt-4 pt-4 border-t border-gray-300 text-sm text-gray-700">
+                        <h3 class="font-semibold mb-2">Detalhes do Cálculo:</h3>
+                        <!-- A lógica do cálculo será inserida aqui -->
+                    </div>
+                </div>
+
+                <div id="markupErrorMessage" class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden" role="alert">
+                    <!-- Mensagens de erro serão exibidas aqui -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Calculadora de Preço de Venda e Lançamento de Vendas Unificada -->
+        <div id="sellingPriceCalculatorSection" class="calculator-section">
+            <!-- Seção de Cálculo de Preço de Venda -->
+            <div class="mb-6 p-4 border border-blue-200 rounded-lg bg-blue-50">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-gray-800">Calcular e Adicionar/Atualizar Produto</h2>
+                    <button type="button" class="toggle-section-btn text-gray-600 hover:text-gray-800 transition-transform duration-300 transform rotate-0" data-target="productCalculationContent">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                </div>
+                <div id="productCalculationContent" class="section-content">
+                    <div class="mb-4">
+                        <label for="productName" class="block text-gray-700 text-sm font-semibold mb-2">Nome do Produto:</label>
+                        <input type="text" id="productName" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: Camisa Polo">
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label for="individualProductCost" class="block text-gray-700 text-sm font-semibold mb-2">Custo Individual por Unidade (R$):</label>
+                            <input type="number" id="individualProductCost" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: 25.00">
+                        </div>
+                        <div>
+                            <label for="freightCostPerUnit" class="block text-gray-700 text-sm font-semibold mb-2">Custo do Frete por Unidade (R$):</label>
+                            <input type="number" id="freightCostPerUnit" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: 2.50">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="productQuantity" class="block text-gray-700 text-sm font-semibold mb-2">Quantidade em Estoque (unidades):</label>
+                        <input type="number" id="productQuantity" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: 10" value="1">
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div>
+                            <label for="calculatedUnitCostDisplay" class="block text-gray-700 text-sm font-semibold mb-2">Custo Total por Unidade (Calculado) (R$):</label>
+                            <input type="text" id="calculatedUnitCostDisplay" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight bg-gray-100 cursor-not-allowed" readonly>
+                        </div>
+                        <div>
+                            <label for="calculatedTotalProductCostDisplay" class="block text-gray-700 text-sm font-semibold mb-2">Custo Total do Lote (Calculado) (R$):</label>
+                            <input type="text" id="calculatedTotalProductCostDisplay" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight bg-gray-100 cursor-not-allowed" readonly>
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <label for="markupMultiplierInput" class="block text-gray-700 text-sm font-semibold mb-2">Markup Multiplicador:</label>
+                        <input type="number" id="markupMultiplierInput" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight bg-gray-100 cursor-not-allowed" placeholder="Calcule o Markup na outra seção" readonly>
+                    </div>
+
+                    <button id="calculateSellingPriceBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                        Calcular e Adicionar Produto
+                    </button>
+
+                    <div id="sellingPriceErrorMessage" class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden" role="alert">
+                        <!-- Mensagens de erro serão exibidas aqui -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seção de Integração Google Sheets -->
+            <div class="mb-6 p-4 border border-green-200 rounded-lg bg-green-50">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Configuração do Google Sheets</h2>
+                <div class="mb-4">
+                    <label for="googleSheetsUrl" class="block text-gray-700 text-sm font-semibold mb-2">URL do Google Apps Script (Web App):</label>
+                    <input type="text" id="googleSheetsUrl" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" placeholder="Cole a URL do seu Apps Script aqui">
+                </div>
+                <button id="saveSheetsUrlBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    Salvar URL e Carregar Dados
+                </button>
+                <div id="googleSheetsErrorMessage" class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden" role="alert">
+                    <!-- Mensagens de erro da integração com Google Sheets -->
+                </div>
+            </div>
+
+
+            <!-- Seção de Lista de Produtos -->
+            <div id="productListSection" class="mt-6 p-4 bg-gray-100 rounded-lg border border-gray-300">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">Produtos em Estoque:</h3>
+                    <button type="button" class="toggle-section-btn text-gray-600 hover:text-gray-800 transition-transform duration-300 transform rotate-0" data-target="productListContent">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                </div>
+                <div id="productListContent" class="section-content">
+                    <!-- Nova seção de pesquisa de produto -->
+                    <div class="mb-4 flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                        <input type="text" id="searchProductInput" class="shadow-sm appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-grow" placeholder="Pesquisar produto por nome...">
+                        <button id="clearSearchBtn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                            Limpar Pesquisa
+                        </button>
+                    </div>
+                    
+                    <div id="productList" class="space-y-2">
+                        <!-- Lista de produtos será exibida aqui -->
+                    </div>
+                    <p id="noProductsMessage" class="text-gray-500 text-sm mt-2">Nenhum produto adicionado ainda.</p>
+                </div>
+            </div>
+
+            <!-- Seção de Vendas Recentes (permanece aqui) -->
+            <div id="recentSalesListSection" class="mt-6 p-4 bg-gray-100 rounded-lg border border-gray-300">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">Vendas Recentes:</h3>
+                    <button type="button" class="toggle-section-btn text-gray-600 hover:text-gray-800 transition-transform duration-300 transform rotate-0" data-target="recentSalesContent">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                </div>
+                <div id="recentSalesContent" class="section-content">
+                    <div id="recentSalesList" class="space-y-2">
+                        <!-- Vendas recentes serão exibidas aqui -->
+                    </div>
+                    <p id="noSalesMessage" class="text-gray-500 text-sm mt-2">Nenhuma venda registrada ainda.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nova Seção: Controle de Caixa -->
+        <div id="cashControlSection" class="calculator-section">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">Controle de Caixa</h2>
+
+            <!-- Saldo Atual do Caixa -->
+            <div class="mb-6 p-4 border border-blue-200 rounded-lg bg-blue-50">
+                <h3 class="text-xl font-semibold text-gray-800 mb-2">Saldo Atual em Caixa:</h3>
+                <p id="currentCashBalance" class="text-blue-700 text-4xl font-bold">R$ 0.00</p>
+            </div>
+
+            <!-- Registro de Movimentações de Caixa -->
+            <div class="mb-6 p-4 border border-purple-200 rounded-lg bg-purple-50">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Registrar Movimentação</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="cashMovementDate" class="block text-gray-700 text-sm font-semibold mb-2">Data:</label>
+                        <input type="date" id="cashMovementDate" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    <div>
+                        <label for="cashMovementType" class="block text-gray-700 text-sm font-semibold mb-2">Tipo:</label>
+                        <select id="cashMovementType" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Selecione</option>
+                            <option value="inflow">Entrada (Manual)</option>
+                            <option value="outflow">Saída</option>
+                            <option value="opening">Abertura de Caixa</option>
+                            <option value="closing">Fechamento de Caixa</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label for="cashMovementDescription" class="block text-gray-700 text-sm font-semibold mb-2">Descrição:</label>
+                    <input type="text" id="cashMovementDescription" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: Retirada para despesas, Capital inicial">
+                </div>
+                <div class="mb-4">
+                    <label for="cashMovementAmount" class="block text-gray-700 text-sm font-semibold mb-2">Valor (R$):</label>
+                    <input type="number" id="cashMovementAmount" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: 150.00">
+                </div>
+                <button id="addCashMovementBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    Registrar Movimentação
+                </button>
+                <div id="cashMovementErrorMessage" class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden" role="alert">
+                    <!-- Mensagens de erro serão exibidas aqui -->
+                </div>
+            </div>
+
+            <!-- Histórico de Movimentações de Caixa -->
+            <div class="mt-6 p-4 bg-gray-100 rounded-lg border border-gray-300">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Histórico de Movimentações</h3>
+                <div id="cashMovementsList" class="space-y-2">
+                    <!-- Movimentações de caixa serão exibidas aqui -->
+                </div>
+                <p id="noCashMovementsMessage" class="text-gray-500 text-sm mt-2">Nenhuma movimentação de caixa registrada ainda.</p>
+            </div>
+        </div>
+
+        <!-- Nova Seção: Capital de Giro -->
+        <div id="workingCapitalSection" class="calculator-section">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">Capital de Giro</h2>
+
+            <!-- Resumo do Capital de Giro -->
+            <div class="mb-6 p-4 border border-blue-200 rounded-lg bg-blue-50">
+                <h3 class="text-xl font-semibold text-gray-800 mb-2">Capital de Giro Atual:</h3>
+                <p id="currentWorkingCapital" class="text-blue-700 text-4xl font-bold">R$ 0.00</p>
+                <p class="text-sm text-gray-600 mt-2">
+                    <span class="font-semibold">Ativo Circulante:</span> <span id="currentAssetsDisplay">R$ 0.00</span>
+                </p>
+                <p class="text-sm text-gray-600">
+                    <span class="font-semibold">Passivo Circulante:</span> <span id="currentLiabilitiesDisplay">R$ 0.00</span>
+                </p>
+            </div>
+
+            <!-- Detalhes do Ativo Circulante -->
+            <div class="mb-6 p-4 border border-green-200 rounded-lg bg-green-50">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Ativo Circulante (Excluindo Caixa e Estoque)</h3>
+                <div id="otherCurrentAssetsList" class="mb-4">
+                    <!-- Outros ativos circulantes serão adicionados aqui dinamicamente -->
+                </div>
+                <button type="button" id="addOtherAssetBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    Adicionar Outro Ativo
+                </button>
+            </div>
+
+            <!-- Detalhes do Passivo Circulante -->
+            <div class="mb-6 p-4 border border-red-200 rounded-lg bg-red-50">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Passivo Circulante</h3>
+                <div id="currentLiabilitiesList" class="mb-4">
+                    <!-- Passivos circulantes serão adicionados aqui dinamicamente -->
+                </div>
+                <button type="button" id="addLiabilityBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    Adicionar Passivo
+                </button>
+            </div>
+            <div id="workingCapitalErrorMessage" class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden" role="alert">
+                <!-- Mensagens de erro serão exibidas aqui -->
+            </div>
+        </div>
+
+        <!-- Nova Seção: Relatório Geral -->
+        <div id="reportSection" class="calculator-section">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">Relatório Geral</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                <div class="bg-blue-100 p-4 rounded-lg border border-blue-300">
+                    <h3 class="font-semibold text-gray-800 mb-2">Total de Produtos em Estoque</h3>
+                    <p id="totalProductsCount" class="text-blue-700 text-2xl font-bold">0</p>
+                </div>
+                <div class="bg-green-100 p-4 rounded-lg border border-green-300">
+                    <h3 class="font-semibold text-gray-800 mb-2">Custo Médio por Unidade (Estoque)</h3>
+                    <p id="avgUnitCost" class="text-green-700 text-2xl font-bold">R$ 0.00</p>
+                </div>
+                <div class="bg-purple-100 p-4 rounded-lg border border-purple-300">
+                    <h3 class="font-semibold text-gray-800 mb-2">Preço Médio de Venda Sugerido (Estoque)</h3>
+                    <p id="avgSuggestedSellingPrice" class="text-purple-700 text-2xl font-bold">R$ 0.00</p>
+                </div>
+                <div class="bg-yellow-100 p-4 rounded-lg border border-yellow-300">
+                    <h3 class="font-semibold text-gray-800 mb-2">Preço Médio de Venda Real (Estoque)</h3>
+                    <p id="avgActualSoldPrice" class="text-yellow-700 text-2xl font-bold">R$ 0.00</p>
+                </div>
+                <div class="bg-red-100 p-4 rounded-lg border border-red-300">
+                    <h3 class="font-semibold text-gray-800 mb-2">Markup Médio Sugerido (Estoque)</h3>
+                    <p id="avgSuggestedMarkup" class="text-red-700 text-2xl font-bold">0.00</p>
+                </div>
+                <div class="bg-teal-100 p-4 rounded-lg border border-teal-300">
+                    <h3 class="font-semibold text-gray-800 mb-2">Markup Médio Real (Estoque)</h3>
+                    <p id="avgRealMarkup" class="text-teal-700 text-2xl font-bold">0.00</p>
+                </div>
+
+                <!-- Desempenho Geral do Estoque -->
+                <div class="bg-indigo-100 p-4 rounded-lg border border-indigo-300 col-span-1 md:col-span-2 lg:col-span-3">
+                    <h3 class="font-semibold text-gray-800 mb-2">Desempenho Geral do Estoque</h3>
+                    <div class="flex flex-wrap justify-around items-center text-center">
+                        <div class="p-2">
+                            <p class="text-indigo-700 text-xl font-bold" id="totalStockCost">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Valor Total (Custo)</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-pink-700 text-xl font-bold" id="totalStockSuggestedSellingPrice">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Valor Total (Venda Sugerida)</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-orange-700 text-xl font-bold" id="totalStockActualSoldPrice">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Valor Total (Definido pelo Lojista)</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-green-700 text-xl font-bold" id="totalStockPotentialProfitSuggested">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Lucro Potencial Sugerido</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-blue-700 text-xl font-bold" id="totalStockPotentialProfitActual">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Lucro Potencial Real</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Desempenho Geral de Vendas (Registros) -->
+                <div class="bg-gray-100 p-4 rounded-lg border border-gray-300 col-span-1 md:col-span-2 lg:col-span-3">
+                    <h3 class="font-semibold text-gray-800 mb-2">Desempenho Geral de Vendas (Registros)</h3>
+                    <div class="flex flex-wrap justify-around items-center text-center">
+                        <div class="p-2">
+                            <p class="text-green-600 text-xl font-bold" id="productsWithGain">0</p>
+                            <span class="text-sm text-gray-600">Vendas com Lucro</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-red-600 text-xl font-bold" id="productsWithLoss">0</p>
+                            <span class="text-sm text-gray-600">Vendas com Prejuízo</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-gray-600 text-xl font-bold" id="productsNeutral">0</p>
+                            <span class="text-sm text-gray-600">Vendas Neutras</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-blue-600 text-xl font-bold" id="overallGainLossPercentage">0.00%</p>
+                            <span class="text-sm text-gray-600">Média Ganho/Perda (Vendas)</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-indigo-600 text-xl font-bold" id="totalActualRevenue">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Receita Total Real (Vendas)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nova Seção: Desempenho Geral do Markup -->
+                <div class="bg-yellow-100 p-4 rounded-lg border border-yellow-300 col-span-1 md:col-span-2 lg:col-span-3">
+                    <h3 class="font-semibold text-gray-800 mb-2">Desempenho Geral do Markup</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-center">
+                        <div class="p-2">
+                            <p class="text-yellow-700 text-xl font-bold" id="markupReportRevenue">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Receita Mensal Estimada</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-yellow-700 text-xl font-bold" id="markupReportVariableExpenses">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Despesas Variáveis (R$)</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-yellow-700 text-xl font-bold" id="markupReportFixedExpenses">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Despesas Fixas (R$)</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-yellow-700 text-xl font-bold" id="markupReportProfitMargin">0.00%</p>
+                            <span class="text-sm text-gray-600">Margem de Lucro Desejada</span>
+                        </div>
+                        <div class="p-2 col-span-1 sm:col-span-2">
+                            <p class="text-yellow-700 text-xl font-bold" id="markupReportMarkupMultiplier">0.00</p>
+                            <span class="text-sm text-gray-600">Markup Multiplicador</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nova Seção: Ponto de Equilíbrio e Acompanhamento de Vendas -->
+                <div class="bg-green-100 p-4 rounded-lg border border-green-300 col-span-1 md:col-span-2 lg:col-span-3">
+                    <h3 class="font-semibold text-gray-800 mb-2">Ponto de Equilíbrio e Acompanhamento de Vendas</h3>
+                    <div class="flex flex-col items-center gap-4">
+                        <div class="text-center">
+                            <p class="text-green-700 text-xl font-bold" id="breakEvenRevenue">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Receita para Ponto de Equilíbrio</span>
+                        </div>
+                        <div class="w-full relative progress-bar-container">
+                            <div class="progress-bar-fill" id="breakEvenProgressBar"></div>
+                            <span class="progress-bar-text-outside" id="breakEvenProgressText">0.00%</span>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-green-700 text-xl font-bold" id="currentSalesProgress">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Vendas Atuais (Progresso)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nova Seção: Resumo de Caixa -->
+                <div class="bg-orange-100 p-4 rounded-lg border border-orange-300 col-span-1 md:col-span-2 lg:col-span-3">
+                    <h3 class="font-semibold text-gray-800 mb-2">Resumo de Caixa</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-center">
+                        <div class="p-2">
+                            <p class="text-orange-700 text-xl font-bold" id="reportCashBalance">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Saldo Atual</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-orange-700 text-xl font-bold" id="reportTotalInflows">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Total Entradas (Manual + Vendas)</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-orange-700 text-xl font-bold" id="reportTotalOutflows">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Total Saídas</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nova Seção: Resumo de Capital de Giro -->
+                <div class="bg-pink-100 p-4 rounded-lg border border-pink-300 col-span-1 md:col-span-2 lg:col-span-3">
+                    <h3 class="font-semibold text-gray-800 mb-2">Resumo de Capital de Giro</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-center">
+                        <div class="p-2">
+                            <p class="text-pink-700 text-xl font-bold" id="reportWorkingCapital">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Capital de Giro</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-pink-700 text-xl font-bold" id="reportCurrentAssets">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Ativo Circulante</span>
+                        </div>
+                        <div class="p-2">
+                            <p class="text-pink-700 text-xl font-bold" id="reportCurrentLiabilities">R$ 0.00</p>
+                            <span class="text-sm text-gray-600">Passivo Circulante</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação -->
+    <div id="confirmationModalOverlay" class="confirmation-modal-overlay">
+        <div class="confirmation-modal-content">
+            <p id="confirmationMessage" class="text-lg text-gray-800 mb-6">Tem certeza que deseja limpar os dados?</p>
+            <div class="flex justify-center space-x-4">
+                <button id="confirmYesBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    Sim
+                </button>
+                <button id="confirmNoBtn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    Não
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Imagem -->
+    <div id="imageModalOverlay" class="confirmation-modal-overlay">
+        <div class="confirmation-modal-content">
+            <h3 id="imageModalTitle" class="text-xl font-semibold text-gray-800 mb-4"></h3>
+            <img id="productImageDisplay" src="" alt="Imagem do Produto" class="w-full h-auto rounded-lg mb-4 object-contain max-h-80">
+            <p id="imageErrorText" class="text-red-600 text-sm mb-4 hidden">Imagem não encontrada para este produto.</p>
+            <button id="closeImageModalBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                Fechar
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal de Lançamento de Vendas (Novo) -->
+    <div id="salesEntryModalOverlay" class="confirmation-modal-overlay">
+        <div class="confirmation-modal-content">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">Registrar Nova Venda</h2>
+            
+            <div class="mb-4">
+                <label for="saleProductName" class="block text-gray-700 text-sm font-semibold mb-2">Nome do Produto:</label>
+                <input type="text" id="saleProductName" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: Camisa Polo" list="productNamesDatalist">
+                <datalist id="productNamesDatalist"></datalist>
+            </div>
+
+            <div class="mb-4">
+                <label for="saleQuantitySold" class="block text-gray-700 text-sm font-semibold mb-2">Quantidade Vendida:</label>
+                <input type="number" id="saleQuantitySold" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: 1" value="1">
+            </div>
+
+            <div class="mb-4">
+                <label for="saleActualSoldPrice" class="block text-gray-700 text-sm font-semibold mb-2">Preço de Venda por Unidade (R$):</label>
+                <input type="number" id="saleActualSoldPrice" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: 29.90">
+            </div>
+
+            <button id="addItemToSaleBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105 mb-4">
+                Adicionar ao Carrinho
+            </button>
+
+            <div id="saleErrorMessage" class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden" role="alert">
+                <!-- Mensagens de erro serão exibidas aqui -->
+            </div>
+
+            <div class="mt-6 p-4 bg-gray-100 rounded-lg border border-gray-300 flex-grow"> <!-- flex-grow para ocupar espaço e permitir rolagem -->
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Itens no Carrinho:</h3>
+                <div id="currentSaleItemsList" class="space-y-2 mb-4">
+                    <!-- Itens da venda atual serão exibidos aqui -->
+                </div>
+                <p id="noCurrentSaleItemsMessage" class="text-gray-500 text-sm mb-4">Nenhum item adicionado ao carrinho ainda.</p>
+                <div class="text-right text-lg font-bold text-gray-800">
+                    Total da Venda: <span id="currentSaleTotal">R$ 0.00</span>
+                </div>
+            </div>
+
+            <div class="mb-6 mt-6">
+                <label for="saleDate" class="block text-gray-700 text-sm font-semibold mb-2">Data da Venda:</label>
+                <input type="date" id="saleDate" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+
+            <button id="recordSaleBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                Registrar Venda
+            </button>
+            
+            <button id="closeSalesModalBtn" class="mt-4 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                Fechar
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Elementos Comuns ---
+        const hamburgerBtn = document.getElementById('hamburgerBtn');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const hamburgerIcon = hamburgerBtn.querySelector('.hamburger-icon');
+        const calculatorSections = document.querySelectorAll('.calculator-section');
+        const menuItems = document.querySelectorAll('.menu-item');
+        const pageTitle = document.getElementById('pageTitle');
+        const mainHeader = document.querySelector('.main-header'); // Seleciona o cabeçalho principal
+
+        // --- Elementos do Modal de Confirmação ---
+        const confirmationModalOverlay = document.getElementById('confirmationModalOverlay');
+        const confirmationMessage = document.getElementById('confirmationMessage');
+        const confirmYesBtn = document.getElementById('confirmYesBtn');
+        const confirmNoBtn = document.getElementById('confirmNoBtn');
+        let onConfirmCallback = null;
+
+        // --- Elementos do Modal de Imagem ---
+        const imageModalOverlay = document.getElementById('imageModalOverlay');
+        const imageModalTitle = document.getElementById('imageModalTitle');
+        const productImageDisplay = document.getElementById('productImageDisplay');
+        const imageErrorText = document.getElementById('imageErrorText');
+        const closeImageModalBtn = document.getElementById('closeImageModalBtn');
+
+        // --- Elementos da Calculadora de Markup ---
+        const totalMonthlyRevenueInput = document.getElementById('totalMonthlyRevenue');
+        const variableExpensesList = document.getElementById('variableExpensesList');
+        const addVariableExpenseBtn = document.getElementById('addVariableExpenseBtn');
+        const totalVariableExpensesAmountInput = document.getElementById('totalVariableExpensesAmount');
+        const fixedExpensesList = document.getElementById('fixedExpensesList');
+        const addFixedExpenseBtn = document.getElementById('addFixedExpenseBtn');
+        const totalFixedExpensesAmountInput = document.getElementById('totalFixedExpensesAmount');
+        const profitMarginInput = document.getElementById('profitMargin');
+        const markupResultsDiv = document.getElementById('markupResults');
+        const variableExpensesPercentageSpan = document.getElementById('variableExpensesPercentage');
+        const fixedExpensesPercentageSpan = document.getElementById('fixedExpensesPercentage');
+        const markupResultSpan = document.getElementById('markupResult');
+        const calculationLogicDiv = document.getElementById('calculationLogic');
+        const markupErrorMessageDiv = document.getElementById('markupErrorMessage');
+        const importMarkupFile = document.getElementById('importMarkupFile');
+        const importMarkupBtn = document.getElementById('importMarkupBtn');
+        const clearMarkupDataBtn = document.getElementById('clearMarkupDataBtn');
+
+        // --- Elementos da Calculadora de Preço de Venda / Gestão de Produtos ---
+        const productNameInput = document.getElementById('productName');
+        const individualProductCostInput = document.getElementById('individualProductCost');
+        const freightCostPerUnitInput = document.getElementById('freightCostPerUnit');
+        const calculatedUnitCostDisplay = document.getElementById('calculatedUnitCostDisplay');
+        const calculatedTotalProductCostDisplay = document.getElementById('calculatedTotalProductCostDisplay');
+        const productQuantityInput = document.getElementById('productQuantity'); 
+        const markupMultiplierInput = document.getElementById('markupMultiplierInput');
+        const calculateSellingPriceBtn = document.getElementById('calculateSellingPriceBtn');
+        const sellingPriceErrorMessageDiv = document.getElementById('sellingPriceErrorMessage');
+        const productListDiv = document.getElementById('productList');
+        const noProductsMessage = document.getElementById('noProductsMessage');
+        const searchProductInput = document.getElementById('searchProductInput');
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+        // --- Elementos de Integração Google Sheets ---
+        const googleSheetsUrlInput = document.getElementById('googleSheetsUrl');
+        const saveSheetsUrlBtn = document.getElementById('saveSheetsUrlBtn');
+        const googleSheetsErrorMessageDiv = document.getElementById('googleSheetsErrorMessage');
+        const importSheetsLoadingIndicator = document.getElementById('importSheetsLoadingIndicator'); // This spinner will be used for all sheet operations
+
+        // --- Elementos do Lançamento de Vendas (agora no modal) ---
+        const salesModalBtn = document.getElementById('salesModalBtn');
+        const salesEntryModalOverlay = document.getElementById('salesEntryModalOverlay');
+        const closeSalesModalBtn = document.getElementById('closeSalesModalBtn');
+        const saleProductNameInput = document.getElementById('saleProductName');
+        const productNamesDatalist = document.getElementById('productNamesDatalist');
+        const saleQuantitySoldInput = document.getElementById('saleQuantitySold');
+        const saleActualSoldPriceInput = document.getElementById('saleActualSoldPrice');
+        const addItemToSaleBtn = document.getElementById('addItemToSaleBtn');
+        const currentSaleItemsList = document.getElementById('currentSaleItemsList');
+        const noCurrentSaleItemsMessage = document.getElementById('noCurrentSaleItemsMessage');
+        const currentSaleTotalSpan = document.getElementById('currentSaleTotal');
+        const saleDateInput = document.getElementById('saleDate');
+        const recordSaleBtn = document.getElementById('recordSaleBtn');
+        const saleErrorMessageDiv = document.getElementById('saleErrorMessage');
+        const recentSalesListDiv = document.getElementById('recentSalesList');
+        const noSalesMessageSales = document.getElementById('noSalesMessage');
+
+        // --- Elementos do Controle de Caixa ---
+        const currentCashBalanceSpan = document.getElementById('currentCashBalance');
+        const cashMovementDateInput = document.getElementById('cashMovementDate');
+        const cashMovementTypeSelect = document.getElementById('cashMovementType');
+        const cashMovementDescriptionInput = document.getElementById('cashMovementDescription');
+        const cashMovementAmountInput = document.getElementById('cashMovementAmount');
+        const addCashMovementBtn = document.getElementById('addCashMovementBtn');
+        const cashMovementErrorMessageDiv = document.getElementById('cashMovementErrorMessage');
+        const cashMovementsListDiv = document.getElementById('cashMovementsList');
+        const noCashMovementsMessage = document.getElementById('noCashMovementsMessage');
+
+        // --- Elementos do Capital de Giro ---
+        const currentWorkingCapitalSpan = document.getElementById('currentWorkingCapital');
+        const currentAssetsDisplaySpan = document.getElementById('currentAssetsDisplay');
+        const currentLiabilitiesDisplaySpan = document.getElementById('currentLiabilitiesDisplay');
+        const otherCurrentAssetsList = document.getElementById('otherCurrentAssetsList');
+        const addOtherAssetBtn = document.getElementById('addOtherAssetBtn');
+        const currentLiabilitiesList = document.getElementById('currentLiabilitiesList');
+        const addLiabilityBtn = document.getElementById('addLiabilityBtn');
+        const workingCapitalErrorMessageDiv = document.getElementById('workingCapitalErrorMessage');
+
+        // --- Elementos do Relatório Geral ---
+        const totalProductsCountSpan = document.getElementById('totalProductsCount');
+        const avgUnitCostSpan = document.getElementById('avgUnitCost');
+        const avgSuggestedSellingPriceSpan = document.getElementById('avgSuggestedSellingPrice');
+        const avgActualSoldPriceSpan = document.getElementById('avgActualSoldPrice');
+        const avgSuggestedMarkupSpan = document.getElementById('avgSuggestedMarkup');
+        const avgRealMarkupSpan = document.getElementById('avgRealMarkup');
+        const productsWithGainSpan = document.getElementById('productsWithGain');
+        const productsWithLossSpan = document.getElementById('productsWithLoss');
+        const productsNeutralSpan = document.getElementById('productsNeutral');
+        const overallGainLossPercentageSpan = document.getElementById('overallGainLossPercentage');
+        const totalActualRevenueSpan = document.getElementById('totalActualRevenue');
+        // Elementos do Desempenho Geral do Estoque
+        const totalStockCostSpan = document.getElementById('totalStockCost');
+        const totalStockSuggestedSellingPriceSpan = document.getElementById('totalStockSuggestedSellingPrice');
+        const totalStockActualSoldPriceSpan = document.getElementById('totalStockActualSoldPrice');
+        const totalStockPotentialProfitSuggestedSpan = document.getElementById('totalStockPotentialProfitSuggested');
+        const totalStockPotentialProfitActualSpan = document.getElementById('totalStockPotentialProfitActual');
+        // Novos elementos para Desempenho Geral do Markup
+        const markupReportRevenueSpan = document.getElementById('markupReportRevenue');
+        const markupReportVariableExpensesSpan = document.getElementById('markupReportVariableExpenses');
+        const markupReportFixedExpensesSpan = document.getElementById('markupReportFixedExpenses');
+        const markupReportProfitMarginSpan = document.getElementById('markupReportProfitMargin');
+        const markupReportMarkupMultiplierSpan = document.getElementById('markupReportMarkupMultiplier');
+        // Novos elementos para Ponto de Equilíbrio e Acompanhamento
+        const breakEvenRevenueSpan = document.getElementById('breakEvenRevenue');
+        const breakEvenProgressBar = document.getElementById('breakEvenProgressBar');
+        const breakEvenProgressText = document.getElementById('breakEvenProgressText');
+        const currentSalesProgressSpan = document.getElementById('currentSalesProgress');
+        // Novos elementos para Resumo de Caixa
+        const reportCashBalanceSpan = document.getElementById('reportCashBalance');
+        const reportTotalInflowsSpan = document.getElementById('reportTotalInflows');
+        const reportTotalOutflowsSpan = document.getElementById('reportTotalOutflows');
+        // Novos elementos para Resumo de Capital de Giro
+        const reportWorkingCapitalSpan = document.getElementById('reportWorkingCapital');
+        const reportCurrentAssetsSpan = document.getElementById('reportCurrentAssets');
+        const reportCurrentLiabilitiesSpan = document.getElementById('reportCurrentLiabilities');
+
+
+        // --- Novos botões de Exportar/Importar Tudo ---
+        const exportAllDataBtn = document.getElementById('exportAllDataBtn');
+        const importAllDataBtn = document.getElementById('importAllDataBtn');
+        const importAllDataFile = document.getElementById('importAllDataFile');
+
+        // --- Elementos para recolher/expandir seções ---
+        const productCalculationContent = document.getElementById('productCalculationContent');
+        const productListContent = document.getElementById('productListContent');
+        const recentSalesContent = document.getElementById('recentSalesContent');
+
+        // --- Variáveis de Dados Globais (agora sincronizadas com Google Sheets) ---
+        let products = [];
+        let salesRecords = [];
+        let cashFlowRecords = [];
+        let workingCapitalDetails = { otherAssets: [], liabilities: [] };
+        let markupData = { revenue: 0, profitMargin: 0, variableExpensesDetails: [], fixedExpensesDetails: [] };
+        // AQUI: A URL do Google Apps Script deve ser atualizada com a sua URL de implantação.
+        let googleSheetsUrl = 'https://script.google.com/macros/s/AKfycbzKXZxUjzPnGc350MV2JUV8cW9CAhL9TOLwjVhVCM1Zek5MuN6t_x8N8u6DWh4Et-gaSA/exec'; // Substitua por sua URL real!
+
+        let currentSaleItems = [];
+        let editingProductIndex = -1;
+
+        // --- Funções de Comunicação com Google Apps Script ---
+
+        /**
+         * Envia dados para o Google Apps Script (POST request).
+         * @param {string} action - Ação a ser realizada (e.g., 'add', 'update', 'delete').
+         * @param {string} sheetName - Nome da planilha a ser modificada.
+         * @param {object|Array<object>} data - Os dados a serem enviados. Para update/delete, deve incluir um identificador único.
+         * @param {string} [identifierKey] - Chave para identificar o registro em operações de update/delete (e.g., 'Name' para produtos).
+         * @param {any} [identifierValue] - Valor do identificador para update/delete.
+         * @returns {Promise<object>} Resposta do Apps Script.
+         */
+        async function sendDataToGoogleSheets(action, sheetName, data, identifierKey = null, identifierValue = null) {
+            if (!googleSheetsUrl || googleSheetsUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
+                displayError('URL do Google Apps Script não configurada. Por favor, insira a URL na seção "Configuração do Google Sheets".', googleSheetsErrorMessageDiv);
+                return { success: false, message: 'URL do Google Apps Script não configurada.' };
+            }
+
+            // Mostra o spinner e desabilita botões
+            importSheetsLoadingIndicator.classList.remove('hidden');
+            saveSheetsUrlBtn.disabled = true;
+            calculateSellingPriceBtn.disabled = true;
+            addCashMovementBtn.disabled = true;
+            addOtherAssetBtn.disabled = true;
+            addLiabilityBtn.disabled = true;
+            recordSaleBtn.disabled = true;
+            addItemToSaleBtn.disabled = true;
+            exportAllDataBtn.disabled = true;
+            importAllDataBtn.disabled = true;
+
+            try {
+                const payload = {
+                    action: action,
+                    sheetName: sheetName,
+                    data: data
+                };
+
+                if (identifierKey && identifierValue !== null) {
+                    payload.identifierKey = identifierKey;
+                    payload.identifierValue = identifierValue;
+                }
+                
+                const response = await fetch(googleSheetsUrl, {
+                    method: 'POST',
+                    mode: 'cors',
+                    cache: 'no-cache',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Erro na requisição: ${response.status} ${response.statusText} - ${errorText}`);
+                }
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.message || 'Operação falhou no Google Apps Script.');
+                }
+                return result;
+            } catch (error) {
+                console.error(`Erro ao enviar dados para ${sheetName} (${action}):`, error);
+                displayError(`Erro ao ${action} dados em "${sheetName}": ${error.message}. Verifique a URL e a configuração do Apps Script.`, googleSheetsErrorMessageDiv);
+                return { success: false, message: error.message };
+            } finally {
+                // Esconde o spinner e reabilita botões
+                importSheetsLoadingIndicator.classList.add('hidden');
+                saveSheetsUrlBtn.disabled = false;
+                calculateSellingPriceBtn.disabled = false;
+                addCashMovementBtn.disabled = false;
+                addOtherAssetBtn.disabled = false;
+                addLiabilityBtn.disabled = false;
+                recordSaleBtn.disabled = false;
+                addItemToSaleBtn.disabled = false;
+                exportAllDataBtn.disabled = false;
+                importAllDataBtn.disabled = false;
+            }
+        }
+
+        /**
+         * Busca dados de uma planilha específica no Google Apps Script (GET request).
+         * @param {string} sheetName - Nome da planilha a ser lida.
+         * @returns {Promise<Array<object>>} Array de objetos representando as linhas da planilha.
+         */
+        async function fetchSheetData(sheetName) {
+            if (!googleSheetsUrl || googleSheetsUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
+                displayError('URL do Google Apps Script não configurada. Por favor, insira a URL na seção "Configuração do Google Sheets".', googleSheetsErrorMessageDiv);
+                return [];
+            }
+
+            // Mostra o spinner e desabilita botões
+            importSheetsLoadingIndicator.classList.remove('hidden');
+            saveSheetsUrlBtn.disabled = true;
+            calculateSellingPriceBtn.disabled = true;
+            addCashMovementBtn.disabled = true;
+            addOtherAssetBtn.disabled = true;
+            addLiabilityBtn.disabled = true;
+            recordSaleBtn.disabled = true;
+            addItemToSaleBtn.disabled = true;
+            exportAllDataBtn.disabled = true;
+            importAllDataBtn.disabled = true;
+
+            try {
+                const url = new URL(googleSheetsUrl);
+                url.searchParams.append('action', 'get');
+                url.searchParams.append('sheetName', sheetName);
+
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Erro na requisição: ${response.status} ${response.statusText} - ${errorText}`);
+                }
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.message || 'Busca de dados falhou no Google Apps Script.');
+                }
+                return result.data || [];
+            } catch (error) {
+                console.error(`Erro ao buscar dados de ${sheetName}:`, error);
+                displayError(`Erro ao carregar dados de "${sheetName}": ${error.message}. Verifique a URL e a configuração do Apps Script.`, googleSheetsErrorMessageDiv);
+                return [];
+            } finally {
+                // Esconde o spinner e reabilita botões
+                importSheetsLoadingIndicator.classList.add('hidden');
+                saveSheetsUrlBtn.disabled = false;
+                calculateSellingPriceBtn.disabled = false;
+                addCashMovementBtn.disabled = false;
+                addOtherAssetBtn.disabled = false;
+                addLiabilityBtn.disabled = false;
+                recordSaleBtn.disabled = false;
+                addItemToSaleBtn.disabled = false;
+                exportAllDataBtn.disabled = false;
+                importAllDataBtn.disabled = false;
+            }
+        }
+
+        /**
+         * Carrega todos os dados das planilhas do Google Sheets para as variáveis locais e atualiza a UI.
+         */
+        async function loadAllDataFromSheets() {
+            googleSheetsErrorMessageDiv.classList.add('hidden');
+            googleSheetsErrorMessageDiv.textContent = '';
+            
+            // O spinner e os botões são controlados pelas funções sendDataToGoogleSheets/fetchSheetData
+            // Não é necessário controlar aqui novamente.
+            
+            try {
+                products = await fetchSheetData('Products');
+                salesRecords = await fetchSheetData('Sales');
+                cashFlowRecords = await fetchSheetData('Cash Movements');
+                workingCapitalDetails.otherAssets = await fetchSheetData('Working Capital - Assets');
+                workingCapitalDetails.liabilities = await fetchSheetData('Working Capital - Liabilities');
+                
+                const markupDataArray = await fetchSheetData('Markup Data');
+                if (markupDataArray && markupDataArray.length > 0) {
+                    markupData.revenue = parseFloat(markupDataArray[0]['Revenue'] || 0);
+                    markupData.profitMargin = parseFloat(markupDataArray[0]['Profit Margin'] || 0);
+                } else {
+                    markupData = { revenue: 0, profitMargin: 0, variableExpensesDetails: [], fixedExpensesDetails: [] };
+                }
+
+                markupData.variableExpensesDetails = await fetchSheetData('Variable Expenses');
+                markupData.fixedExpensesDetails = await fetchSheetData('Fixed Expenses');
+
+                // Atualiza a UI com os dados carregados
+                renderProductList();
+                populateProductDatalist();
+                renderRecentSalesList();
+                renderCashMovements();
+                renderOtherCurrentAssets();
+                renderCurrentLiabilities();
+                calculateCashBalance();
+                calculateWorkingCapital();
+                loadMarkupDataToUI(); // Carrega os dados de markup para os campos do formulário
+                calculateMarkup(); // Recalcula o markup com base nos dados carregados
+                generateReport();
+
+                showInfoModal('Todos os dados foram carregados com sucesso do Google Sheets!');
+            } catch (error) {
+                console.error('Erro ao carregar todos os dados:', error);
+                displayError(`Erro ao carregar todos os dados: ${error.message}. Verifique a URL e a configuração do Apps Script.`, googleSheetsErrorMessageDiv);
+            }
+        }
+
+        // --- Funções Auxiliares para LocalStorage (agora não usadas para persistência principal) ---
+        // Estas funções foram mantidas, mas a persistência principal é via Google Sheets.
+        function saveProductsToLocalStorage() { /* No longer saves to LS, only for datalist update */ populateProductDatalist(); }
+        function saveSalesRecordsToLocalStorage() { /* No longer saves to LS */ }
+        function saveMarkupDataToLocalStorage() { /* No longer saves to LS */ }
+        function saveCashFlowRecordsToLocalStorage() { /* No longer saves to LS */ }
+        function saveWorkingCapitalDetailsToLocalStorage() { /* No longer saves to LS */ }
+
+        /**
+         * Carrega os dados de markup (receita, margem de lucro, despesas) para os campos da UI.
+         */
+        function loadMarkupDataToUI() {
+            totalMonthlyRevenueInput.value = markupData.revenue.toFixed(2);
+            profitMarginInput.value = markupData.profitMargin.toFixed(2);
+
+            variableExpensesList.innerHTML = '';
+            fixedExpensesList.innerHTML = '';
+
+            if (markupData.variableExpensesDetails && markupData.variableExpensesDetails.length > 0) {
+                markupData.variableExpensesDetails.forEach(exp => {
+                    addVariableExpenseRow(exp.Description, exp.Amount.toFixed(2)); // Use 'Description' and 'Amount' from Sheets
+                });
+            }
+            if (markupData.fixedExpensesDetails && markupData.fixedExpensesDetails.length > 0) {
+                markupData.fixedExpensesDetails.forEach(exp => {
+                    addFixedExpenseRow(exp.Description, exp.Amount.toFixed(2)); // Use 'Description' and 'Amount' from Sheets
+                });
+            }
+            updateTotalVariableExpenses();
+            updateTotalFixedExpenses();
+        }
+
+        let editingProductIndex = -1;
+
+        // --- Funções para Exportar Dados (CSV local) ---
+        // Estas funções agora exportam os dados atualmente carregados na memória, que vêm do Google Sheets.
+        function exportMarkupCalculationToCSV() {
+            let csvContent = "";
+
+            csvContent += "Despesas Variáveis;\n";
+            csvContent += "Descrição;Valor (R$);\n";
+            markupData.variableExpensesDetails.forEach(exp => {
+                csvContent += `"${exp.Description.replace(/"/g, '""')}";${exp.Amount.toFixed(2).replace('.', ',')};\n`;
+            });
+            csvContent += "\n";
+
+            csvContent += "Despesas Fixas;\n";
+            csvContent += "Descrição;Valor (R$);\n";
+            markupData.fixedExpensesDetails.forEach(exp => {
+                csvContent += `"${exp.Description.replace(/"/g, '""')}";${exp.Amount.toFixed(2).replace('.', ',')};\n`;
+            });
+            csvContent += "\n";
+
+            csvContent += "Receita Mensal Estimada (R$);\n";
+            csvContent += `${markupData.revenue.toFixed(2).replace('.', ',')};\n`;
+            csvContent += "\n";
+
+            csvContent += "Margem de Lucro Desejada (%);\n";
+            csvContent += `${markupData.profitMargin.toFixed(2).replace('.', ',')};\n`;
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'detalhes_markup.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                showInfoModal('Detalhes do Markup exportados com sucesso para detalhes_markup.csv!');
+            } else {
+                showInfoModal('O seu navegador não suporta a exportação direta de arquivos CSV. Por favor, copie o texto abaixo e cole numa planilha:\n\n' + csvContent);
+            }
+        }
+
+        // --- Funções para Importar Dados (CSV local para a UI e depois para Google Sheets) ---
+        function importMarkupFromCSV() {
+            importMarkupFile.value = '';
+            importMarkupFile.click();
+        }
+
+        importMarkupFile.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) { return; }
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const csvText = e.target.result;
+                const lines = csvText.split('\n').map(line => line.trim()).filter(line => line !== '');
+
+                if (lines.length < 1) {
+                    showInfoModal('O ficheiro CSV está vazio ou não contém dados.');
+                    return;
+                }
+
+                let currentSection = null;
+                let importedRevenue = 0;
+                let importedProfitMargin = 0;
+                const importedVariableExpenses = [];
+                const importedFixedExpenses = [];
+                const importErrors = [];
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+
+                    if (line === "Despesas Variáveis;") { currentSection = 'variable'; continue; }
+                    else if (line === "Despesas Fixas;") { currentSection = 'fixed'; continue; }
+                    else if (line === "Receita Mensal Estimada (R$);") { currentSection = 'revenue'; continue; }
+                    else if (line === "Margem de Lucro Desejada (%);") { currentSection = 'profitMargin'; continue; }
+                    else if (line === "Descrição;Valor (R$);" || line === "Receita Mensal Estimada (R$);") { continue; }
+
+                    const columns = line.split(';');
+
+                    if (currentSection === 'variable' && columns.length >= 2) {
+                        const description = columns[0].replace(/^"|"$/g, '');
+                        const amount = parseFloat(columns[1].replace(',', '.'));
+                        if (!description || isNaN(amount) || amount < 0) {
+                            importErrors.push(`Linha ${i + 1} (Despesa Variável): Dados inválidos. Esperado "Descrição;Valor".`);
+                        } else { importedVariableExpenses.push({ 'Description': description, 'Amount': amount }); } // Use Sheets column names
+                    } else if (currentSection === 'fixed' && columns.length >= 2) {
+                        const description = columns[0].replace(/^"|"$/g, '');
+                        const amount = parseFloat(columns[1].replace(',', '.'));
+                        if (!description || isNaN(amount) || amount < 0) {
+                            importErrors.push(`Linha ${i + 1} (Despesa Fixa): Dados inválidos. Esperado "Descrição;Valor".`);
+                        } else { importedFixedExpenses.push({ 'Description': description, 'Amount': amount }); } // Use Sheets column names
+                    } else if (currentSection === 'revenue' && columns.length >= 1) {
+                        const revenueValue = parseFloat(columns[0].replace(',', '.'));
+                        if (isNaN(revenueValue) || revenueValue <= 0) {
+                            importErrors.push(`Linha ${i + 1} (Receita): Valor inválido. Esperado um número maior que zero.`);
+                        } else { importedRevenue = revenueValue; }
+                    } else if (currentSection === 'profitMargin' && columns.length >= 1) {
+                        const profitMarginValue = parseFloat(columns[0].replace(',', '.'));
+                        if (isNaN(profitMarginValue) || profitMarginValue < 0 || profitMarginValue >= 100) {
+                            importErrors.push(`Linha ${i + 1} (Margem de Lucro): Valor inválido (deve ser entre 0 e 99.99).`);
+                        } else { importedProfitMargin = profitMarginValue; }
+                    } else if (line !== "") {
+                        if (!line.startsWith("Despesas Variáveis;") && !line.startsWith("Despesas Fixas;") &&
+                            !line.startsWith("Receita Mensal Estimada (R$);") && !line.startsWith("Margem de Lucro Desejada (%);") &&
+                            !line.startsWith("Descrição;Valor (R$);")) {
+                            importErrors.push(`Linha ${i + 1}: Formato inesperado ou dados inválidos. Linha: "${line}"`);
+                        }
+                    }
+                }
+
+                if (importErrors.length > 0) {
+                    const errorSummary = importErrors.join('\n');
+                    showInfoModal('Erros encontrados na importação do Markup:\n\n' + errorSummary);
+                    return;
+                }
+
+                // Update global markupData object
+                markupData.revenue = importedRevenue;
+                markupData.profitMargin = importedProfitMargin;
+                markupData.variableExpensesDetails = importedVariableExpenses;
+                markupData.fixedExpensesDetails = importedFixedExpenses;
+
+                // Send to Google Sheets
+                const markupResult = await sendDataToGoogleSheets('updateMarkup', 'Markup Data', {
+                    revenue: markupData.revenue,
+                    profitMargin: markupData.profitMargin
+                });
+                if (!markupResult.success) return;
+
+                // Clear existing variable expenses in sheet and add new ones
+                await sendDataToGoogleSheets('clearAndAdd', 'Variable Expenses', importedVariableExpenses);
+                // Clear existing fixed expenses in sheet and add new ones
+                await sendDataToGoogleSheets('clearAndAdd', 'Fixed Expenses', importedFixedExpenses);
+
+                // Reload data to ensure UI is consistent with Sheets
+                await loadAllDataFromSheets();
+                showInfoModal('Dados de Markup importados com sucesso e cálculo atualizado!');
+            };
+            reader.onerror = () => { showInfoModal('Erro ao ler o ficheiro.'); };
+            reader.readAsText(file);
+        });
+
+
+        // --- Funções Comuns ---
+        function toggleMenu() {
+            sidebar.classList.toggle('open');
+            sidebarOverlay.classList.toggle('open');
+            hamburgerIcon.classList.toggle('open');
+        }
+
+        // Function to toggle section visibility
+        function toggleSectionVisibility(contentElement, buttonElement) {
+            contentElement.classList.toggle('hidden');
+            buttonElement.classList.toggle('collapsed');
+        }
+
+        /**
+         * Mostra a seção da calculadora especificada e atualiza o título da página.
+         * @param {string} calculatorId - O ID da seção da calculadora a ser exibida (ex: 'markupCalculatorSection').
+         */
+        function showCalculator(calculatorId) {
+            calculatorSections.forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById(calculatorId).classList.add('active');
+
+            const activeMenuItem = document.querySelector(`[data-calculator="${calculatorId.replace('CalculatorSection', '')}"]`);
+            if (activeMenuItem) {
+                menuItems.forEach(item => {
+                    item.classList.remove('active');
+                });
+                activeMenuItem.classList.add('active');
+            }
+            
+            switch (calculatorId) {
+                case 'markupCalculatorSection':
+                    pageTitle.textContent = 'Calculadora de Markup Multiplicador';
+                    loadMarkupDataToUI(); // Garante que os dados de markup são carregados na UI
+                    calculateMarkup();
+                    break;
+                case 'sellingPriceCalculatorSection':
+                    pageTitle.textContent = 'Gestão de Produtos e Vendas';
+                    break;
+                case 'cashControlSection':
+                    pageTitle.textContent = 'Controle de Caixa';
+                    calculateCashBalance();
+                    renderCashMovements();
+                    break;
+                case 'workingCapitalSection':
+                    pageTitle.textContent = 'Capital de Giro';
+                    calculateWorkingCapital();
+                    renderOtherCurrentAssets();
+                    renderCurrentLiabilities();
+                    break;
+                case 'reportSection':
+                    pageTitle.textContent = 'Relatório Geral';
+                    break;
+                default:
+                    pageTitle.textContent = 'Sistema de PDV Completo';
+            }
+
+            if (calculatorId !== 'sellingPriceCalculatorSection') {
+                resetSellingPriceForm();
+            } 
+            
+            if (calculatorId === 'sellingPriceCalculatorSection') {
+                if (markupResultSpan.textContent) {
+                    markupMultiplierInput.value = markupResultSpan.textContent;
+                } else {
+                    markupMultiplierInput.value = '';
+                }
+                renderProductList();
+                populateProductDatalist();
+                renderRecentSalesList();
+            } else if (calculatorId === 'reportSection') {
+                generateReport();
+            }
+            window.scrollTo(0, 0); // Rola para o topo da página
+            toggleMenu();
+        }
+
+        /**
+         * Exibe uma mensagem de erro em um elemento div específico.
+         * @param {string} message - A mensagem de erro a ser exibida.
+         * @param {HTMLElement} errorDiv - O elemento div onde a mensagem será exibida.
+         */
+        function displayError(message, errorDiv) {
+            errorDiv.innerHTML = message; // Usa innerHTML para permitir tags <br>
+            errorDiv.classList.remove('hidden');
+        }
+
+        /**
+         * Exibe um modal de informação personalizado (substitui alert()).
+         * @param {string} message - A mensagem a ser exibida no modal.
+         */
+        function showInfoModal(message) {
+            confirmationMessage.textContent = message;
+            confirmYesBtn.classList.add('hidden'); // Esconde o botão "Sim"
+            confirmNoBtn.textContent = 'Ok'; // Muda "Não" para "Ok"
+            onConfirmCallback = hideConfirmationModal; // Define o callback para apenas esconder
+            confirmationModalOverlay.classList.add('open');
+        }
+
+        // --- Funções da Calculadora de Markup ---
+        /**
+         * Adiciona uma nova linha para despesa fixa na UI.
+         * @param {string} [description=''] - Descrição inicial da despesa.
+         * @param {string} [amount=''] - Valor inicial da despesa.
+         */
+        async function addFixedExpenseRow(description = '', amount = '') {
+            const expenseDiv = document.createElement('div');
+            expenseDiv.className = 'mb-3 flex items-center space-x-2 fixed-expense-row';
+            expenseDiv.innerHTML = `
+                <input type="text" class="fixed-expense-description shadow-sm appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-grow" placeholder="Descrição da Despesa" value="${description}">
+                <input type="number" class="fixed-expense-amount shadow-sm appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-none w-24 sm:w-32 md:w-40 lg:w-48" placeholder="Custo (R$)" value="${amount}">
+                <button type="button" class="remove-expense-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    X
+                </button>
+            `;
+            fixedExpensesList.appendChild(expenseDiv);
+            const amountInput = expenseDiv.querySelector('.fixed-expense-amount');
+            const descriptionInput = expenseDiv.querySelector('.fixed-expense-description');
+            
+            amountInput.addEventListener('input', async () => {
+                await updateMarkupDataInSheets();
+                calculateMarkup();
+            });
+            descriptionInput.addEventListener('input', async () => {
+                await updateMarkupDataInSheets();
+            });
+
+            const removeButton = expenseDiv.querySelector('.remove-expense-btn');
+            removeButton.addEventListener('click', async () => {
+                fixedExpensesList.removeChild(expenseDiv);
+                await updateMarkupDataInSheets();
+                calculateMarkup();
+            });
+            updateTotalFixedExpenses();
+        }
+
+        /**
+         * Atualiza o total das despesas fixas na UI.
+         */
+        async function updateTotalFixedExpenses() {
+            let total = 0;
+            document.querySelectorAll('.fixed-expense-amount').forEach(input => {
+                total += parseFloat(input.value) || 0;
+            });
+            totalFixedExpensesAmountInput.value = total.toFixed(2);
+        }
+
+        /**
+         * Adiciona uma nova linha para despesa variável na UI.
+         * @param {string} [description=''] - Descrição inicial da despesa.
+         * @param {string} [amount=''] - Valor inicial da despesa.
+         */
+        async function addVariableExpenseRow(description = '', amount = '') {
+            const expenseDiv = document.createElement('div');
+            expenseDiv.className = 'mb-3 flex items-center space-x-2 variable-expense-row';
+            expenseDiv.innerHTML = `
+                <input type="text" class="variable-expense-description shadow-sm appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-grow" placeholder="Descrição da Despesa" value="${description}">
+                <input type="number" class="variable-expense-amount shadow-sm appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-none w-24 sm:w-32 md:w-40 lg:w-48" placeholder="Custo (R$)" value="${amount}">
+                <button type="button" class="remove-expense-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    X
+                </button>
+            `;
+            variableExpensesList.appendChild(expenseDiv);
+            const amountInput = expenseDiv.querySelector('.variable-expense-amount');
+            const descriptionInput = expenseDiv.querySelector('.variable-expense-description');
+
+            amountInput.addEventListener('input', async () => {
+                await updateMarkupDataInSheets();
+                calculateMarkup();
+            });
+            descriptionInput.addEventListener('input', async () => {
+                await updateMarkupDataInSheets();
+            });
+
+            const removeButton = expenseDiv.querySelector('.remove-expense-btn');
+            removeButton.addEventListener('click', async () => {
+                variableExpensesList.removeChild(expenseDiv);
+                await updateMarkupDataInSheets();
+                calculateMarkup();
+            });
+            updateTotalVariableExpenses();
+        }
+
+        /**
+         * Atualiza os dados de markup (receita, margem, despesas) no Google Sheets.
+         */
+        async function updateMarkupDataInSheets() {
+            markupData.revenue = parseFloat(totalMonthlyRevenueInput.value) || 0;
+            markupData.profitMargin = parseFloat(profitMarginInput.value) || 0;
+
+            markupData.variableExpensesDetails = [];
+            document.querySelectorAll('#variableExpensesList .variable-expense-row').forEach(row => {
+                const description = row.querySelector('.variable-expense-description').value;
+                const amount = parseFloat(row.querySelector('.variable-expense-amount').value) || 0;
+                markupData.variableExpensesDetails.push({ 'Description': description, 'Amount': amount }); // Usa nomes de coluna do Sheets
+            });
+
+            markupData.fixedExpensesDetails = [];
+            document.querySelectorAll('#fixedExpensesList .fixed-expense-row').forEach(row => {
+                const description = row.querySelector('.fixed-expense-description').value;
+                const amount = parseFloat(row.querySelector('.fixed-expense-amount').value) || 0;
+                markupData.fixedExpensesDetails.push({ 'Description': description, 'Amount': amount }); // Usa nomes de coluna do Sheets
+            });
+
+            await sendDataToGoogleSheets('updateMarkup', 'Markup Data', {
+                revenue: markupData.revenue,
+                profitMargin: markupData.profitMargin
+            });
+            await sendDataToGoogleSheets('clearAndAdd', 'Variable Expenses', markupData.variableExpensesDetails);
+            await sendDataToGoogleSheets('clearAndAdd', 'Fixed Expenses', markupData.fixedExpensesDetails);
+        }
+
+        /**
+         * Atualiza o total das despesas variáveis na UI.
+         */
+        async function updateTotalVariableExpenses() {
+            let total = 0;
+            document.querySelectorAll('.variable-expense-amount').forEach(input => {
+                total += parseFloat(input.value) || 0;
+            });
+            totalVariableExpensesAmountInput.value = total.toFixed(2);
+        }
+
+        /**
+         * Calcula o Markup Multiplicador e atualiza a UI.
+         */
+        function calculateMarkup() {
+            markupErrorMessageDiv.classList.add('hidden');
+            markupResultsDiv.classList.add('hidden');
+            markupErrorMessageDiv.textContent = '';
+            calculationLogicDiv.innerHTML = '';
+
+            const revenue = parseFloat(totalMonthlyRevenueInput.value);
+            const varExpAmount = parseFloat(totalVariableExpensesAmountInput.value);
+            const fixExpAmount = parseFloat(totalFixedExpensesAmountInput.value);
+            const profitM = parseFloat(profitMarginInput.value);
+
+            if (isNaN(revenue) || revenue <= 0) { return; }
+            if (isNaN(varExpAmount) || varExpAmount < 0) { return; }
+            if (isNaN(fixExpAmount) || fixExpAmount < 0) { return; }
+            if (isNaN(profitM) || profitM < 0 || profitM >= 100) { return; }
+
+            const varExpPerc = (varExpAmount / revenue) * 100;
+            const fixExpPerc = (fixExpAmount / revenue) * 100;
+
+            if (varExpPerc >= 100 || fixExpPerc >= 100) {
+                displayError('As despesas variáveis ou fixas calculadas excedem 100% da receita mensal. Por favor, verifique os valores.', markupErrorMessageDiv);
+                return;
+            }
+
+            const sumPerc = varExpPerc + fixExpPerc + profitM;
+
+            if (sumPerc >= 100) {
+                displayError('A soma das Despesas Variáveis (calculada), Despesas Fixas (calculada) e Margem de Lucro não pode ser igual ou superior a 100%. Isso impossibilitaria o cálculo do markup.', markupErrorMessageDiv);
+                return;
+            }
+
+            const markup = 100 / (100 - sumPerc);
+
+            variableExpensesPercentageSpan.textContent = `${varExpPerc.toFixed(2)}%`;
+            fixedExpensesPercentageSpan.textContent = `${fixExpPerc.toFixed(2)}%`;
+            markupResultSpan.textContent = markup.toFixed(2);
+            markupResultsDiv.classList.remove('hidden');
+
+            markupMultiplierInput.value = markup.toFixed(2);
+            
+            let logicHtml = `
+                <p class="mb-1">1. <strong>Despesas Variáveis em %:</strong> (Despesas Variáveis em R$ / Receita Mensal Total) * 100</p>
+                <p class="mb-1">   ($R\$ ${varExpAmount.toFixed(2)} / $R\$ ${revenue.toFixed(2)}) * 100 = <strong>${varExpPerc.toFixed(2)}%</strong></p>
+                <p class="mb-1">2. <strong>Despesas Fixas em %:</strong> (Despesas Fixas em R$ / Receita Mensal Total) * 100</p>
+                <p class="mb-1">   ($R\$ ${fixExpAmount.toFixed(2)} / $R\$ ${revenue.toFixed(2)}) * 100 = <strong>${fixExpPerc.toFixed(2)}%</strong></p>
+                <p class="mb-1">3. <strong>Soma das Porcentagens:</strong> Despesas Variáveis (%) + Despesas Fixas (%) + Margem de Lucro (%)</p>
+                <p class="mb-1">   ${varExpPerc.toFixed(2)}% + ${fixExpPerc.toFixed(2)}% + ${profitM.toFixed(2)}% = <strong>${sumPerc.toFixed(2)}%</strong></p>
+                <p class="mb-1">4. <strong>Cálculo do Markup:</strong> 100 / (100 - Soma das Porcentagens)</p>
+                <p class="mb-1">   100 / (100 - ${sumPerc.toFixed(2)}) = 100 / ${ (100 - sumPerc).toFixed(2) } = <strong>${markup.toFixed(2)}</strong></p>
+            `;
+            calculationLogicDiv.innerHTML = logicHtml;
+        }
+
+        // --- Funções da Calculadora de Preço de Venda / Gestão de Produtos ---
+        /**
+         * Lida com o cálculo do preço de venda e adição/atualização de produtos.
+         */
+        async function handleSellingPriceCalculation() {
+            sellingPriceErrorMessageDiv.classList.add('hidden');
+            sellingPriceErrorMessageDiv.textContent = '';
+
+            const pName = productNameInput.value.trim();
+            const pIndividualCost = parseFloat(individualProductCostInput.value);
+            const pFreightCost = parseFloat(freightCostPerUnitInput.value);
+            const pQuantity = parseInt(productQuantityInput.value);
+            const mMultiplier = parseFloat(markupMultiplierInput.value);
+
+            if (!pName) {
+                displayError('Por favor, insira o Nome do Produto.', sellingPriceErrorMessageDiv);
+                return;
+            }
+            if (editingProductIndex === -1 && products.some(product => product['Name'].toLowerCase() === pName.toLowerCase())) {
+                displayError('Já existe um produto com este nome. Por favor, use um nome diferente.', sellingPriceErrorMessageDiv);
+                return;
+            }
+            if (editingProductIndex !== -1 && products[editingProductIndex]['Name'].toLowerCase() !== pName.toLowerCase() && products.some((product, i) => i !== editingProductIndex && product['Name'].toLowerCase() === pName.toLowerCase())) {
+                displayError('Já existe outro produto com este nome. Por favor, use um nome diferente.', sellingPriceErrorMessageDiv);
+                return;
+            }
+
+            if (isNaN(pIndividualCost) || pIndividualCost < 0) {
+                displayError('Por favor, insira um Custo Individual por Unidade válido (maior ou igual a zero).', sellingPriceErrorMessageDiv);
+                return;
+            }
+            if (isNaN(pFreightCost) || pFreightCost < 0) {
+                displayError('Por favor, insira um Custo do Frete por Unidade válido (maior ou igual a zero).', sellingPriceErrorMessageDiv);
+                return;
+            }
+            if (isNaN(pQuantity) || pQuantity < 0) {
+                displayError('Por favor, insira uma Quantidade em Estoque válida (maior ou igual a zero).', sellingPriceErrorMessageDiv);
+                return;
+            }
+            if (isNaN(mMultiplier) || mMultiplier <= 0) {
+                displayError('Por favor, calcule o Markup Multiplicador na seção anterior primeiro.', sellingPriceErrorMessageDiv);
+                return;
+            }
+
+            const calculatedInitialUnitCost = pIndividualCost + pFreightCost;
+            const sellingPricePerUnit = calculatedInitialUnitCost * mMultiplier;
+
+            let productToSave = {
+                'Name': pName,
+                'Individual Cost (R$)': pIndividualCost,
+                'Freight Cost (R$)': pFreightCost,
+                'Quantity in Stock': pQuantity,
+                'Markup Suggested': mMultiplier,
+                'Suggested Selling Price (R$)': sellingPricePerUnit,
+                'Actual Selling Price (R$)': sellingPricePerUnit // Default to suggested for new products
+            };
+
+            let result;
+            if (editingProductIndex !== -1) {
+                // Para atualização, precisamos do nome original do produto como identificador
+                const originalProductName = products[editingProductIndex]['Name'];
+                result = await sendDataToGoogleSheets('update', 'Products', productToSave, 'Name', originalProductName);
+            } else {
+                result = await sendDataToGoogleSheets('add', 'Products', productToSave);
+            }
+
+            if (result.success) {
+                await loadAllDataFromSheets(); // Recarrega todos os produtos da planilha
+                resetSellingPriceForm();
+                searchProductInput.value = '';
+
+                setTimeout(() => {
+                    const targetId = `product-item-${pName.replace(/\s+/g, '-')}`;
+                    const targetElement = document.getElementById(targetId);
+                    if (targetElement) {
+                        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 100);
+            }
+        }
+
+        /**
+         * Renderiza a lista de produtos na UI.
+         * @param {Array<object>} [productsToDisplay=products] - Array de produtos a serem exibidos.
+         */
+        function renderProductList(productsToDisplay = products) {
+            productListDiv.innerHTML = '';
+            if (productsToDisplay.length === 0) {
+                noProductsMessage.classList.remove('hidden');
+            } else {
+                noProductsMessage.classList.add('hidden');
+
+                const sortedProducts = [...productsToDisplay].sort((a, b) => (a['Quantity in Stock'] === 0) - (b['Quantity in Stock'] === 0));
+
+                sortedProducts.forEach((product, index) => {
+                    const unitCostDisplay = product['Individual Cost (R$)'] + product['Freight Cost (R$)'];
+                    const realMarkup = unitCostDisplay > 0 ? product['Actual Selling Price (R$)'] / unitCostDisplay : 0;
+                    let percentageDifference = 0;
+                    let gainLossClass = 'text-gray-700';
+
+                    if (product['Suggested Selling Price (R$)'] > 0) {
+                        percentageDifference = ((product['Actual Selling Price (R$)'] - product['Suggested Selling Price (R$)']) / product['Suggested Selling Price (R$)']) * 100;
+                        if (percentageDifference > 0) {
+                            gainLossClass = 'text-green-600';
+                        } else if (percentageDifference < 0) {
+                            gainLossClass = 'text-red-600';
+                        }
+                    }
+
+                    const productItem = document.createElement('div');
+                    productItem.className = 'flex flex-wrap sm:flex-nowrap justify-between items-start sm:items-center bg-white p-3 rounded-lg shadow-sm border border-gray-200';
+                    productItem.id = `product-item-${product['Name'].replace(/\s+/g, '-')}`;
+                    productItem.innerHTML = `
+                        <div class="flex flex-col mb-2 sm:mb-0 sm:w-1/3 md:w-1/4 lg:w-1/5">
+                            <span class="font-medium text-gray-800">${product['Name']}</span>
+                            <span class="text-sm text-gray-600">Custo Total Lote: R$ ${(unitCostDisplay * product['Quantity in Stock']).toFixed(2)} | Qtd: ${product['Quantity in Stock']}</span>
+                            <span class="text-sm text-gray-600">Custo por Unidade Base: R$ ${unitCostDisplay.toFixed(2)}</span>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center sm:flex-grow mb-2 sm:mb-0 sm:ml-4 sm:mr-4">
+                            <span class="text-blue-700 font-bold mr-2 whitespace-nowrap w-full sm:w-auto mb-1 sm:mb-0">Venda Sugerida: R$ ${product['Suggested Selling Price (R$)'].toFixed(2)}</span>
+                            <div class="flex items-center space-x-2 w-full sm:w-auto mb-1 sm:mb-0">
+                                <label for="actualSoldPrice-${product['Name'].replace(/\s+/g, '-')}" class="text-sm text-gray-600 whitespace-nowrap">Definido pelo lojista (R$):</label>
+                                <input type="number" id="actualSoldPrice-${product['Name'].replace(/\s+/g, '-')}" class="actual-sold-price-input shadow-sm appearance-none border rounded-lg py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 text-right" value="${product['Actual Selling Price (R$)'].toFixed(2)}">
+                            </div>
+                            <div class="flex flex-col sm:flex-row sm:items-center w-full sm:w-auto">
+                                <span class="text-sm text-gray-600 whitespace-nowrap">Markup Real: <span class="font-semibold">${realMarkup.toFixed(2)}</span></span>
+                                <span class="${gainLossClass} text-sm whitespace-nowrap font-semibold sm:ml-2">${percentageDifference.toFixed(2)}%</span>
+                            </div>
+                        </div>
+
+                        <div class="flex space-x-2 mt-2 sm:mt-0 sm:ml-4 sm:w-auto">
+                            <button type="button" class="view-image-btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-product-name="${product['Name']}">
+                                Imagem
+                            </button>
+                            <button type="button" class="edit-product-btn bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-product-name="${product['Name']}">
+                                Editar
+                            </button>
+                            <button type="button" class="remove-product-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-product-name="${product['Name']}">
+                                Remover
+                            </button>
+                        </div>
+                    `;
+                    productListDiv.appendChild(productItem);
+
+                    productItem.querySelector('.edit-product-btn').addEventListener('click', (event) => {
+                        const productName = event.target.dataset.productName;
+                        const originalIndex = products.findIndex(p => p['Name'] === productName);
+                        if (originalIndex !== -1) {
+                            editProduct(originalIndex);
+                        }
+                    });
+                    productItem.querySelector('.remove-product-btn').addEventListener('click', (event) => {
+                        const productName = event.target.dataset.productName;
+                        const originalIndex = products.findIndex(p => p['Name'] === productName);
+                        if (originalIndex !== -1) {
+                            showConfirmationModal(`Tem certeza que deseja remover o produto "${productName}"?`, async () => {
+                                await removeProductConfirmed(originalIndex);
+                                hideConfirmationModal();
+                            });
+                        }
+                    });
+                    productItem.querySelector('.view-image-btn').addEventListener('click', (event) => {
+                        const productName = event.target.dataset.productName;
+                        showImageModal(productName);
+                    });
+
+                    const actualSoldPriceInput = productItem.querySelector(`#actualSoldPrice-${product['Name'].replace(/\s+/g, '-')}`);
+                    actualSoldPriceInput.addEventListener('change', async (event) => {
+                        const newValue = parseFloat(event.target.value);
+                        if (!isNaN(newValue) && newValue >= 0) {
+                            const updatedProduct = { ...product, 'Actual Selling Price (R$)': newValue };
+                            const result = await sendDataToGoogleSheets('update', 'Products', updatedProduct, 'Name', product['Name']);
+                            if (result.success) {
+                                await loadAllDataFromSheets(); // Re-render para atualizar a % de diferença
+                            }
+                        } else {
+                            event.target.value = product['Actual Selling Price (R$)'].toFixed(2);
+                        }
+                    });
+                });
+            }
+        }
+
+        /**
+         * Preenche os campos do formulário de produto com os dados do produto para edição.
+         * @param {number} index - O índice do produto a ser editado no array `products`.
+         */
+        function editProduct(index) {
+            const productToEdit = products[index];
+            if (productToEdit) {
+                productNameInput.value = productToEdit['Name'];
+                individualProductCostInput.value = productToEdit['Individual Cost (R$)'] !== undefined ? productToEdit['Individual Cost (R$)'].toFixed(2) : '';
+                freightCostPerUnitInput.value = productToEdit['Freight Cost (R$)'] !== undefined ? productToEdit['Freight Cost (R$)'].toFixed(2) : '';
+                productQuantityInput.value = productToEdit['Quantity in Stock'];
+                markupMultiplierInput.value = productToEdit['Markup Suggested'].toFixed(2);
+
+                const currentIndividualCost = parseFloat(individualProductCostInput.value) || 0;
+                const currentFreightCost = parseFloat(freightCostPerUnitInput.value) || 0;
+                const currentQuantity = parseInt(productQuantityInput.value) || 0;
+
+                const calculatedUnitCost = currentIndividualCost + currentFreightCost;
+                const calculatedTotalCost = calculatedUnitCost * currentQuantity;
+
+                calculatedUnitCostDisplay.value = calculatedUnitCost.toFixed(2);
+                calculatedTotalProductCostDisplay.value = calculatedTotalCost.toFixed(2);
+                
+                calculateSellingPriceBtn.textContent = 'Salvar Edição';
+                editingProductIndex = index;
+                sellingPriceErrorMessageDiv.classList.add('hidden');
+                productNameInput.focus();
+            }
+        }
+
+        /**
+         * Remove um produto da lista e do Google Sheets após confirmação.
+         * @param {number} index - O índice do produto a ser removido.
+         */
+        async function removeProductConfirmed(index) {
+            const productName = products[index]['Name'];
+            const result = await sendDataToGoogleSheets('delete', 'Products', { 'Name': productName }, 'Name', productName);
+            if (result.success) {
+                await loadAllDataFromSheets();
+                resetSellingPriceForm();
+                searchProductInput.value = '';
+                showInfoModal('Produto removido com sucesso!');
+            }
+        }
+
+        /**
+         * Reseta os campos do formulário de cálculo de preço de venda.
+         */
+        function resetSellingPriceForm() {
+            productNameInput.value = '';
+            individualProductCostInput.value = '';
+            freightCostPerUnitInput.value = '';
+            calculatedUnitCostDisplay.value = '';
+            calculatedTotalProductCostDisplay.value = '';
+            productQuantityInput.value = '1';
+            calculateSellingPriceBtn.textContent = 'Calcular e Adicionar Produto';
+            editingProductIndex = -1;
+            sellingPriceErrorMessageDiv.classList.add('hidden');
+        }
+
+        // --- Nova Função de Pesquisa ---
+        /**
+         * Filtra e renderiza a lista de produtos com base no termo de pesquisa.
+         */
+        function searchProducts() {
+            const searchTerm = searchProductInput.value.toLowerCase().trim();
+            if (searchTerm === '') {
+                renderProductList(products);
+                return;
+            }
+
+            const filteredProducts = products.filter(product => 
+                product['Name'].toLowerCase().includes(searchTerm)
+            );
+            renderProductList(filteredProducts);
+        }
+
+        // --- Funções do Modal de Confirmação ---
+        /**
+         * Exibe o modal de confirmação com uma mensagem e um callback para o botão "Sim".
+         * @param {string} message - A mensagem a ser exibida.
+         * @param {Function} callback - A função a ser executada se o usuário clicar em "Sim".
+         */
+        function showConfirmationModal(message, callback) {
+            confirmationMessage.textContent = message;
+            confirmYesBtn.classList.remove('hidden'); // Mostra o botão "Sim"
+            confirmNoBtn.textContent = 'Não'; // Restaura o texto "Não"
+            onConfirmCallback = callback;
+            confirmationModalOverlay.classList.add('open');
+        }
+
+        /**
+         * Esconde o modal de confirmação.
+         */
+        function hideConfirmationModal() {
+            confirmationModalOverlay.classList.remove('open');
+            onConfirmCallback = null;
+        }
+
+        // --- Funções do Modal de Imagem ---
+        /**
+         * Exibe o modal de imagem com a imagem do produto.
+         * @param {string} productName - O nome do produto para exibir a imagem.
+         */
+        function showImageModal(productName) {
+            imageModalTitle.textContent = `Imagem do Produto: ${productName}`;
+            imageErrorText.classList.add('hidden');
+            productImageDisplay.classList.remove('hidden');
+
+            const imagePath = `imagens/${productName}.png`; 
+
+            productImageDisplay.src = imagePath;
+            productImageDisplay.onerror = () => {
+                productImageDisplay.src = `https://placehold.co/400x300/cccccc/333333?text=Imagem+N%C3%A3o+Encontrada`;
+                imageErrorText.classList.remove('hidden');
+            };
+            imageModalOverlay.classList.add('open');
+        }
+
+        /**
+         * Esconde o modal de imagem.
+         */
+        function hideImageModal() {
+            imageModalOverlay.classList.remove('open');
+            productImageDisplay.src = '';
+        }
+
+        // --- Funções de Limpeza de Dados ---
+        /**
+         * Limpa todos os dados da Calculadora de Markup no Google Sheets e na UI.
+         */
+        function clearMarkupData() {
+            showConfirmationModal('Tem certeza que deseja limpar todos os dados da Calculadora de Markup?', async () => {
+                markupData = { revenue: 0, profitMargin: 0, variableExpensesDetails: [], fixedExpensesDetails: [] };
+                
+                const markupResult = await sendDataToGoogleSheets('updateMarkup', 'Markup Data', {
+                    revenue: markupData.revenue,
+                    profitMargin: markupData.profitMargin
+                });
+                if (!markupResult.success) return;
+
+                await sendDataToGoogleSheets('clearAll', 'Variable Expenses', {});
+                await sendDataToGoogleSheets('clearAll', 'Fixed Expenses', {});
+
+                await loadAllDataFromSheets(); // Recarrega todos os dados para refletir as mudanças
+                showInfoModal('Dados da Calculadora de Markup limpos com sucesso!');
+                hideConfirmationModal();
+            });
+        }
+
+        // --- Funções do Lançamento de Vendas (agora no modal) ---
+        /**
+         * Popula o datalist de produtos para o campo de nome do produto na venda.
+         */
+        function populateProductDatalist() {
+            productNamesDatalist.innerHTML = '';
+            products.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product['Name'];
+                productNamesDatalist.appendChild(option);
+            });
+        }
+
+        saleProductNameInput.addEventListener('input', () => {
+            const enteredName = saleProductNameInput.value.trim().toLowerCase();
+            const foundProduct = products.find(p => p['Name'].toLowerCase() === enteredName);
+            if (foundProduct) {
+                saleActualSoldPriceInput.value = foundProduct['Actual Selling Price (R$)'].toFixed(2);
+            } else {
+                saleActualSoldPriceInput.value = '';
+            }
+        });
+
+        /**
+         * Adiciona um item ao carrinho de vendas atual.
+         */
+        async function addItemToCurrentSale() {
+            saleErrorMessageDiv.classList.add('hidden');
+            saleErrorMessageDiv.textContent = '';
+
+            const productName = saleProductNameInput.value.trim();
+            const quantitySold = parseInt(saleQuantitySoldInput.value);
+            const actualSoldPricePerUnitInput = parseFloat(saleActualSoldPriceInput.value);
+
+            if (!productName) {
+                displayError('Por favor, insira o nome do produto.', saleErrorMessageDiv);
+                return;
+            }
+            if (isNaN(quantitySold) || quantitySold <= 0) {
+                displayError('Por favor, insira uma quantidade vendida válida e maior que zero.', saleErrorMessageDiv);
+                return;
+            }
+            if (isNaN(actualSoldPricePerUnitInput) || actualSoldPricePerUnitInput < 0) {
+                displayError('Por favor, insira um preço de venda por unidade válido (maior ou igual a zero).', saleErrorMessageDiv);
+                return;
+            }
+
+            const productInStock = products.find(p => p['Name'].toLowerCase() === productName.toLowerCase());
+
+            if (!productInStock) {
+                displayError(`Produto "${productName}" não encontrado na lista de produtos.`, saleErrorMessageDiv);
+                return;
+            }
+
+            const existingCartItem = currentSaleItems.find(item => item.productName.toLowerCase() === productName.toLowerCase());
+            let currentCartQuantity = existingCartItem ? existingCartItem.quantitySold : 0;
+
+            if (quantitySold + currentCartQuantity > productInStock['Quantity in Stock']) {
+                displayError(`Quantidade total para "${productName}" (${quantitySold + currentCartQuantity}) excede o stock disponível (${productInStock['Quantity in Stock']}).`, saleErrorMessageDiv);
+                return;
+            }
+
+            const unitCostAtSale = productInStock['Individual Cost (R$)'] + productInStock['Freight Cost (R$)'];
+            const suggestedSellingPricePerUnitAtSale = unitCostAtSale * productInStock['Markup Suggested'];
+            const totalActualSoldPriceAtSale = actualSoldPricePerUnitInput * quantitySold;
+            const totalSuggestedSellingPriceAtSale = suggestedSellingPricePerUnitAtSale * quantitySold;
+
+            if (existingCartItem) {
+                existingCartItem.quantitySold += quantitySold;
+                existingCartItem.totalActualSoldPriceAtSale += totalActualSoldPriceAtSale;
+                existingCartItem.totalSuggestedSellingPriceAtSale += totalSuggestedSellingPriceAtSale;
+                existingCartItem.actualSoldPricePerUnitAtSale = actualSoldPricePerUnitInput;
+            } else {
+                currentSaleItems.push({
+                    productName: productName,
+                    quantitySold: quantitySold,
+                    unitCostAtSale: unitCostAtSale,
+                    suggestedSellingPricePerUnitAtSale: suggestedSellingPricePerUnitAtSale,
+                    actualSoldPricePerUnitAtSale: actualSoldPricePerUnitInput,
+                    totalActualSoldPriceAtSale: totalActualSoldPriceAtSale,
+                    totalSuggestedSellingPriceAtSale: totalSuggestedSellingPriceAtSale
+                });
+            }
+
+            renderCurrentSaleItems();
+            saleProductNameInput.value = '';
+            saleQuantitySoldInput.value = '1';
+            saleActualSoldPriceInput.value = '';
+            saleProductNameInput.focus();
+        }
+
+        /**
+         * Renderiza os itens do carrinho de vendas atual na UI.
+         */
+        function renderCurrentSaleItems() {
+            currentSaleItemsList.innerHTML = '';
+            let totalSaleValue = 0;
+
+            if (currentSaleItems.length === 0) {
+                noCurrentSaleItemsMessage.classList.remove('hidden');
+            } else {
+                noCurrentSaleItemsMessage.classList.add('hidden');
+                currentSaleItems.forEach((item, index) => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'bg-white p-2 rounded-lg shadow-sm border border-gray-200 flex justify-between items-center';
+                    itemDiv.innerHTML = `
+                        <div>
+                            <span class="font-medium text-gray-800">${item.productName}</span>
+                            <span class="text-sm text-gray-600"> - ${item.quantitySold} unid. @ R$ ${item.actualSoldPricePerUnitAtSale.toFixed(2)} /unid.</span>
+                            <span class="text-base font-semibold text-gray-700 block">Total: R$ ${item.totalActualSoldPriceAtSale.toFixed(2)}</span>
+                        </div>
+                        <button type="button" class="remove-current-sale-item-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-index="${index}">
+                            Remover
+                        </button>
+                    `;
+                    currentSaleItemsList.appendChild(itemDiv);
+                    totalSaleValue += item.totalActualSoldPriceAtSale;
+
+                    itemDiv.querySelector('.remove-current-sale-item-btn').addEventListener('click', (event) => {
+                        const itemIndex = parseInt(event.target.dataset.index);
+                        removeItemFromCurrentSale(itemIndex);
+                    });
+                });
+            }
+            currentSaleTotalSpan.textContent = `R$ ${totalSaleValue.toFixed(2)}`;
+        }
+
+        /**
+         * Remove um item do carrinho de vendas atual.
+         * @param {number} index - O índice do item a ser removido.
+         */
+        function removeItemFromCurrentSale(index) {
+            currentSaleItems.splice(index, 1);
+            renderCurrentSaleItems();
+        }
+
+        /**
+         * Lida com o registro de uma venda completa no Google Sheets.
+         */
+        async function handleRecordSale() {
+            saleErrorMessageDiv.classList.add('hidden');
+            saleErrorMessageDiv.textContent = '';
+
+            const saleDate = saleDateInput.value;
+
+            if (currentSaleItems.length === 0) {
+                displayError('Por favor, adicione pelo menos um item ao carrinho para registrar a venda.', saleErrorMessageDiv);
+                return;
+            }
+            if (!saleDate) {
+                displayError('Por favor, selecione a data da venda.', saleErrorMessageDiv);
+                return;
+            }
+
+            const transactionId = crypto.randomUUID();
+            let allSalesSuccessful = true;
+
+            for (const item of currentSaleItems) {
+                const productIndex = products.findIndex(p => p['Name'].toLowerCase() === item.productName.toLowerCase());
+
+                if (productIndex !== -1) {
+                    const product = products[productIndex];
+                    const newQuantity = product['Quantity in Stock'] - item.quantitySold;
+                    
+                    const updatedProductData = {
+                        'Name': product['Name'],
+                        'Individual Cost (R$)': product['Individual Cost (R$)'],
+                        'Freight Cost (R$)': product['Freight Cost (R$)'],
+                        'Quantity in Stock': newQuantity,
+                        'Markup Suggested': product['Markup Suggested'],
+                        'Suggested Selling Price (R$)': product['Suggested Selling Price (R$)'],
+                        'Actual Selling Price (R$)': product['Actual Selling Price (R$)']
+                    };
+
+                    const productUpdateResult = await sendDataToGoogleSheets('update', 'Products', updatedProductData, 'Name', product['Name']);
+                    if (!productUpdateResult.success) {
+                        allSalesSuccessful = false;
+                        console.error(`Falha ao atualizar o stock para ${item.productName}`);
+                        displayError(`Falha ao atualizar o stock para ${item.productName}.`, saleErrorMessageDiv);
+                        break; // Para o processamento se a atualização do produto falhar
+                    }
+
+                    const saleRecordData = {
+                        'Transaction ID': transactionId,
+                        'Product Name': item.productName,
+                        'Quantity Sold': item.quantitySold,
+                        'Actual Sold Price Per Unit (R$)': item.actualSoldPricePerUnitAtSale,
+                        'Total Actual Sold Price (R$)': item.totalActualSoldPriceAtSale,
+                        'Unit Cost at Sale (R$)': item.unitCostAtSale,
+                        'Suggested Selling Price Per Unit at Sale (R$)': item.suggestedSellingPricePerUnitAtSale,
+                        'Total Suggested Selling Price at Sale (R$)': item.totalSuggestedSellingPriceAtSale,
+                        'Sale Date': saleDate
+                    };
+                    const saleRecordResult = await sendDataToGoogleSheets('add', 'Sales', saleRecordData);
+                    if (!saleRecordResult.success) {
+                        allSalesSuccessful = false;
+                        console.error(`Falha ao registrar a venda para ${item.productName}`);
+                        displayError(`Falha ao registrar a venda para ${item.productName}.`, saleErrorMessageDiv);
+                        break; // Para o processamento se o registro da venda falhar
+                    }
+
+                    const cashMovementData = {
+                        'ID': crypto.randomUUID(),
+                        'Date': saleDate,
+                        'Type': 'sale_inflow',
+                        'Description': `Venda de ${item.quantitySold}x ${item.productName}`,
+                        'Amount (R$)': item.totalActualSoldPriceAtSale,
+                        'Transaction ID': transactionId
+                    };
+                    const cashMovementResult = await sendDataToGoogleSheets('add', 'Cash Movements', cashMovementData);
+                    if (!cashMovementResult.success) {
+                        allSalesSuccessful = false;
+                        console.error(`Falha ao registrar movimentação de caixa para ${item.productName}`);
+                        displayError(`Falha ao registrar movimentação de caixa para ${item.productName}.`, saleErrorMessageDiv);
+                        break; // Para o processamento se a movimentação de caixa falhar
+                    }
+                } else {
+                    allSalesSuccessful = false;
+                    console.error(`Erro: Produto "${item.productName}" não encontrado ao registrar a venda.`);
+                    displayError(`Erro: Produto "${item.productName}" não encontrado ao registrar a venda.`, saleErrorMessageDiv);
+                    break;
+                }
+            }
+
+            if (allSalesSuccessful) {
+                await loadAllDataFromSheets(); // Recarrega todos os dados após operações bem-sucedidas
+                currentSaleItems = [];
+                renderCurrentSaleItems();
+                hideSalesModal();
+                showInfoModal('Venda registrada com sucesso!');
+            } else {
+                showInfoModal('Ocorreu um erro ao registrar a venda. Algumas operações podem não ter sido concluídas.');
+            }
+        }
+
+        /**
+         * Renderiza a lista de vendas recentes na UI.
+         */
+        function renderRecentSalesList() {
+            recentSalesListDiv.innerHTML = '';
+            if (salesRecords.length === 0) {
+                noSalesMessageSales.classList.remove('hidden');
+            } else {
+                noSalesMessageSales.classList.add('hidden');
+                salesRecords.slice().reverse().forEach((sale, index) => {
+                    const saleItem = document.createElement('div');
+                    saleItem.className = 'bg-white p-2 rounded-lg shadow-sm border border-gray-200 flex justify-between items-center';
+                    saleItem.innerHTML = `
+                        <div>
+                            <span class="font-medium text-gray-800">${sale['Product Name']}</span>
+                            <span class="text-sm text-gray-600"> - ${sale['Quantity Sold']} unid. @ R$ ${sale['Actual Sold Price Per Unit (R$)'].toFixed(2)} /unid.</span>
+                            <span class="text-base font-semibold text-gray-700 block">Total: R$ ${sale['Total Actual Sold Price (R$)'].toFixed(2)}</span>
+                            <span class="text-sm text-gray-500 block">Data: ${sale['Sale Date']}</span>
+                            ${sale['Transaction ID'] ? `<span class="text-xs text-gray-400 block">Transação ID: ${sale['Transaction ID'].substring(0, 8)}...</span>` : ''}
+                        </div>
+                        <button type="button" class="remove-sale-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-transaction-id="${sale['Transaction ID']}" data-product-name="${sale['Product Name']}" data-quantity-sold="${sale['Quantity Sold']}">
+                            Remover
+                        </button>
+                    `;
+                    recentSalesListDiv.appendChild(saleItem);
+
+                    saleItem.querySelector('.remove-sale-btn').addEventListener('click', async (event) => {
+                        const transactionId = event.target.dataset.transactionId;
+                        const productName = event.target.dataset.productName;
+                        const quantitySold = parseInt(event.target.dataset.quantitySold);
+                        showConfirmationModal('Tem certeza que deseja remover esta venda? O stock do produto será ajustado e a movimentação de caixa será revertida.', async () => {
+                            await removeSaleConfirmed(transactionId, productName, quantitySold);
+                            hideConfirmationModal();
+                        });
+                    });
+                });
+            }
+        }
+
+        /**
+         * Remove uma venda do Google Sheets e reverte as alterações de estoque e caixa.
+         * @param {string} transactionId - O ID da transação da venda a ser removida.
+         * @param {string} productName - O nome do produto envolvido na venda.
+         * @param {number} quantitySold - A quantidade vendida do produto.
+         */
+        async function removeSaleConfirmed(transactionId, productName, quantitySold) {
+            // Reverte o estoque do produto
+            const product = products.find(p => p['Name'].toLowerCase() === productName.toLowerCase());
+            if (product) {
+                const updatedProductData = {
+                    'Name': product['Name'],
+                    'Individual Cost (R$)': product['Individual Cost (R$)'],
+                    'Freight Cost (R$)': product['Freight Cost (R$)'],
+                    'Quantity in Stock': product['Quantity in Stock'] + quantitySold,
+                    'Markup Suggested': product['Markup Suggested'],
+                    'Suggested Selling Price (R$)': product['Suggested Selling Price (R$)'],
+                    'Actual Selling Price (R$)': product['Actual Selling Price (R$)']
+                };
+                await sendDataToGoogleSheets('update', 'Products', updatedProductData, 'Name', product['Name']);
+            }
+
+            // Remove o registro de venda
+            await sendDataToGoogleSheets('delete', 'Sales', { 'Transaction ID': transactionId }, 'Transaction ID', transactionId);
+
+            // Remove as movimentações de caixa associadas (sale_inflow)
+            const cashMovementsToRemove = cashFlowRecords.filter(m => m.Type === 'sale_inflow' && m['Transaction ID'] === transactionId);
+            for (const movement of cashMovementsToRemove) {
+                await sendDataToGoogleSheets('delete', 'Cash Movements', { 'ID': movement.ID }, 'ID', movement.ID);
+            }
+
+            await loadAllDataFromSheets();
+            showInfoModal('Venda removida e estoque ajustado!');
+        }
+
+        /**
+         * Mostra o modal de lançamento de vendas.
+         */
+        function showSalesModal() {
+            salesEntryModalOverlay.classList.add('open');
+            saleDateInput.value = new Date().toISOString().split('T')[0];
+            saleErrorMessageDiv.classList.add('hidden');
+            currentSaleItems = [];
+            renderCurrentSaleItems();
+            saleProductNameInput.focus();
+            window.scrollTo(0, 0); // Rola para o topo
+        }
+
+        /**
+         * Esconde o modal de lançamento de vendas.
+         */
+        function hideSalesModal() {
+            salesEntryModalOverlay.classList.remove('open');
+            saleProductNameInput.value = '';
+            saleQuantitySoldInput.value = '1';
+            saleActualSoldPriceInput.value = '';
+            saleErrorMessageDiv.classList.add('hidden');
+            currentSaleItems = [];
+            renderCurrentSaleItems();
+        }
+
+        // --- Funções do Controle de Caixa ---
+        /**
+         * Calcula o saldo atual do caixa com base nos registros de movimentação.
+         * @returns {number} O saldo atual do caixa.
+         */
+        function calculateCashBalance() {
+            let balance = 0;
+            cashFlowRecords.forEach(movement => {
+                if (movement.Type === 'inflow' || movement.Type === 'sale_inflow' || movement.Type === 'opening') {
+                    balance += movement['Amount (R$)'];
+                } else if (movement.Type === 'outflow' || movement.Type === 'closing') {
+                    balance -= movement['Amount (R$)'];
+                }
+            });
+            currentCashBalanceSpan.textContent = `R$ ${balance.toFixed(2)}`;
+            return balance;
+        }
+
+        /**
+         * Adiciona uma nova movimentação de caixa ao Google Sheets.
+         */
+        async function addCashMovement() {
+            cashMovementErrorMessageDiv.classList.add('hidden');
+            cashMovementErrorMessageDiv.textContent = '';
+
+            const date = cashMovementDateInput.value;
+            const type = cashMovementTypeSelect.value;
+            const description = cashMovementDescriptionInput.value.trim();
+            const amount = parseFloat(cashMovementAmountInput.value);
+
+            if (!date) {
+                displayError('Por favor, selecione a data da movimentação.', cashMovementErrorMessageDiv);
+                return;
+            }
+            if (!type) {
+                displayError('Por favor, selecione o tipo de movimentação.', cashMovementErrorMessageDiv);
+                return;
+            }
+            if (!description) {
+                displayError('Por favor, insira uma descrição para a movimentação.', cashMovementErrorMessageDiv);
+                return;
+            }
+            if (isNaN(amount) || amount <= 0) {
+                displayError('Por favor, insira um valor válido e maior que zero.', cashMovementErrorMessageDiv);
+                return;
+            }
+
+            const newMovement = {
+                'ID': crypto.randomUUID(),
+                'Date': date,
+                'Type': type,
+                'Description': description,
+                'Amount (R$)': amount
+            };
+
+            const result = await sendDataToGoogleSheets('add', 'Cash Movements', newMovement);
+            if (result.success) {
+                await loadAllDataFromSheets();
+                cashMovementDateInput.value = new Date().toISOString().split('T')[0];
+                cashMovementTypeSelect.value = '';
+                cashMovementDescriptionInput.value = '';
+                cashMovementAmountInput.value = '';
+                showInfoModal('Movimentação de caixa registrada com sucesso!');
+            }
+        }
+
+        /**
+         * Renderiza o histórico de movimentações de caixa na UI.
+         */
+        function renderCashMovements() {
+            cashMovementsListDiv.innerHTML = '';
+            if (cashFlowRecords.length === 0) {
+                noCashMovementsMessage.classList.remove('hidden');
+            } else {
+                noCashMovementsMessage.classList.add('hidden');
+                const sortedMovements = [...cashFlowRecords].sort((a, b) => new Date(b.Date) - new Date(a.Date));
+
+                sortedMovements.forEach((movement, index) => {
+                    const typeClass = (movement.Type === 'inflow' || movement.Type === 'sale_inflow' || movement.Type === 'opening') ? 'text-green-600' : 'text-red-600';
+                    const sign = (movement.Type === 'inflow' || movement.Type === 'sale_inflow' || movement.Type === 'opening') ? '+' : '-';
+                    const movementItem = document.createElement('div');
+                    movementItem.className = 'bg-white p-2 rounded-lg shadow-sm border border-gray-200 flex justify-between items-center';
+                    movementItem.innerHTML = `
+                        <div>
+                            <span class="font-medium text-gray-800">${movement.Description}</span>
+                            <span class="text-sm text-gray-600 block">Data: ${movement.Date} | Tipo: ${movement.Type.replace('_', ' ').replace('sale', 'Venda')}</span>
+                            <span class="text-base font-semibold ${typeClass} block">${sign} R$ ${movement['Amount (R$)'].toFixed(2)}</span>
+                            ${movement.ID ? `<span class="text-xs text-gray-400 block">ID: ${movement.ID.substring(0, 8)}...</span>` : ''}
+                        </div>
+                        <button type="button" class="remove-cash-movement-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-id="${movement.ID}">
+                            Remover
+                        </button>
+                    `;
+                    cashMovementsListDiv.appendChild(movementItem);
+
+                    movementItem.querySelector('.remove-cash-movement-btn').addEventListener('click', async (event) => {
+                        const movementId = event.target.dataset.id;
+                        showConfirmationModal('Tem certeza que deseja remover esta movimentação de caixa? Isso afetará o saldo.', async () => {
+                            await removeCashMovementConfirmed(movementId);
+                            hideConfirmationModal();
+                        });
+                    });
+                });
+            }
+        }
+
+        /**
+         * Remove uma movimentação de caixa do Google Sheets.
+         * @param {string} id - O ID da movimentação a ser removida.
+         */
+        async function removeCashMovementConfirmed(id) {
+            const result = await sendDataToGoogleSheets('delete', 'Cash Movements', { 'ID': id }, 'ID', id);
+            if (result.success) {
+                await loadAllDataFromSheets();
+                showInfoModal('Movimentação de caixa removida!');
+            }
+        }
+
+        // --- Funções do Capital de Giro ---
+        /**
+         * Calcula o capital de giro atual e atualiza a UI.
+         */
+        function calculateWorkingCapital() {
+            const cashBalance = calculateCashBalance();
+            let totalInventoryValue = products.reduce((sum, product) => sum + ((product['Individual Cost (R$)'] + product['Freight Cost (R$)']) * product['Quantity in Stock']), 0);
+            let totalOtherAssets = workingCapitalDetails.otherAssets.reduce((sum, asset) => sum + asset['Value (R$)'], 0);
+            let totalLiabilities = workingCapitalDetails.liabilities.reduce((sum, liability) => sum + liability['Value (R$)'], 0);
+
+            const totalCurrentAssets = cashBalance + totalInventoryValue + totalOtherAssets;
+            const workingCapital = totalCurrentAssets - totalLiabilities;
+
+            currentAssetsDisplaySpan.textContent = `R$ ${totalCurrentAssets.toFixed(2)}`;
+            currentLiabilitiesDisplaySpan.textContent = `R$ ${totalLiabilities.toFixed(2)}`;
+            currentWorkingCapitalSpan.textContent = `R$ ${workingCapital.toFixed(2)}`;
+        }
+
+        /**
+         * Adiciona uma nova linha para outro ativo circulante na UI.
+         * @param {string} [description=''] - Descrição inicial do ativo.
+         * @param {string} [amount=''] - Valor inicial do ativo.
+         */
+        async function addOtherAssetRow(description = '', amount = '') {
+            const assetDiv = document.createElement('div');
+            assetDiv.className = 'mb-3 flex items-center space-x-2 other-asset-row';
+            assetDiv.innerHTML = `
+                <input type="text" class="other-asset-description shadow-sm appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-grow" placeholder="Descrição do Ativo" value="${description}">
+                <input type="number" class="other-asset-amount shadow-sm appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-none w-24 sm:w-32 md:w-40 lg:w-48" placeholder="Valor (R$)" value="${amount}">
+                <button type="button" class="remove-asset-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    X
+                </button>
+            `;
+            otherCurrentAssetsList.appendChild(assetDiv);
+            const amountInput = assetDiv.querySelector('.other-asset-amount');
+            const descriptionInput = assetDiv.querySelector('.other-asset-description');
+
+            amountInput.addEventListener('input', async () => {
+                await updateWorkingCapitalDetailsInSheets();
+                calculateWorkingCapital();
+            });
+            descriptionInput.addEventListener('input', async () => {
+                await updateWorkingCapitalDetailsInSheets();
+            });
+
+            const removeButton = assetDiv.querySelector('.remove-asset-btn');
+            removeButton.addEventListener('click', async () => {
+                otherCurrentAssetsList.removeChild(assetDiv);
+                await updateWorkingCapitalDetailsInSheets();
+                calculateWorkingCapital();
+            });
+        }
+
+        /**
+         * Adiciona uma nova linha para passivo circulante na UI.
+         * @param {string} [description=''] - Descrição inicial do passivo.
+         * @param {string} [amount=''] - Valor inicial do passivo.
+         */
+        async function addLiabilityRow(description = '', amount = '') {
+            const liabilityDiv = document.createElement('div');
+            liabilityDiv.className = 'mb-3 flex items-center space-x-2 current-liability-row';
+            liabilityDiv.innerHTML = `
+                <input type="text" class="current-liability-description shadow-sm appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-grow" placeholder="Descrição do Passivo" value="${description}">
+                <input type="number" class="current-liability-amount shadow-sm appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-none w-24 sm:w-32 md:w-40 lg:w-48" placeholder="Valor (R$)" value="${amount}">
+                <button type="button" class="remove-liability-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
+                    X
+                </button>
+            `;
+            currentLiabilitiesList.appendChild(liabilityDiv);
+            const amountInput = liabilityDiv.querySelector('.current-liability-amount');
+            const descriptionInput = liabilityDiv.querySelector('.current-liability-description');
+
+            amountInput.addEventListener('input', async () => {
+                await updateWorkingCapitalDetailsInSheets();
+                calculateWorkingCapital();
+            });
+            descriptionInput.addEventListener('input', async () => {
+                await updateWorkingCapitalDetailsInSheets();
+            });
+
+            const removeButton = liabilityDiv.querySelector('.remove-liability-btn');
+            removeButton.addEventListener('click', async () => {
+                currentLiabilitiesList.removeChild(liabilityDiv);
+                await updateWorkingCapitalDetailsInSheets();
+                calculateWorkingCapital();
+            });
+        }
+
+        /**
+         * Renderiza a lista de outros ativos circulantes na UI.
+         */
+        function renderOtherCurrentAssets() {
+            otherCurrentAssetsList.innerHTML = '';
+            workingCapitalDetails.otherAssets.forEach(asset => {
+                addOtherAssetRow(asset.Description, asset['Value (R$)'].toFixed(2));
+            });
+        }
+
+        /**
+         * Renderiza a lista de passivos circulantes na UI.
+         */
+        function renderCurrentLiabilities() {
+            currentLiabilitiesList.innerHTML = '';
+            workingCapitalDetails.liabilities.forEach(liability => {
+                addLiabilityRow(liability.Description, liability['Value (R$)'].toFixed(2));
+            });
+        }
+
+        /**
+         * Atualiza os detalhes de capital de giro (ativos e passivos) no Google Sheets.
+         */
+        async function updateWorkingCapitalDetailsInSheets() {
+            const otherAssets = [];
+            document.querySelectorAll('#otherCurrentAssetsList .other-asset-row').forEach(row => {
+                const description = row.querySelector('.other-asset-description').value;
+                const amount = parseFloat(row.querySelector('.other-asset-amount').value) || 0;
+                otherAssets.push({ 'Description': description, 'Value (R$)': amount });
+            });
+
+            const liabilities = [];
+            document.querySelectorAll('#currentLiabilitiesList .current-liability-row').forEach(row => {
+                const description = row.querySelector('.current-liability-description').value;
+                const amount = parseFloat(row.querySelector('.current-liability-amount').value) || 0;
+                liabilities.push({ 'Description': description, 'Value (R$)': amount });
+            });
+
+            // Atualiza o objeto local workingCapitalDetails
+            workingCapitalDetails.otherAssets = otherAssets;
+            workingCapitalDetails.liabilities = liabilities;
+
+            // Envia para o Google Sheets
+            await sendDataToGoogleSheets('clearAndAdd', 'Working Capital - Assets', otherAssets);
+            await sendDataToGoogleSheets('clearAndAdd', 'Working Capital - Liabilities', liabilities);
+        }
+
+
+        // --- Funções do Relatório Geral ---
+        /**
+         * Gera e exibe o relatório geral na UI.
+         */
+        function generateReport() {
+            if (products.length === 0 && salesRecords.length === 0 && cashFlowRecords.length === 0) {
+                totalProductsCountSpan.textContent = '0';
+                avgUnitCostSpan.textContent = 'R$ 0.00';
+                avgSuggestedSellingPriceSpan.textContent = 'R$ 0.00';
+                avgActualSoldPriceSpan.textContent = 'R$ 0.00';
+                avgSuggestedMarkupSpan.textContent = '0.00';
+                avgRealMarkupSpan.textContent = '0.00';
+                productsWithGainSpan.textContent = '0';
+                productsWithLossSpan.textContent = '0';
+                productsNeutralSpan.textContent = '0';
+                overallGainLossPercentageSpan.textContent = '0.00%';
+                totalActualRevenueSpan.textContent = 'R$ 0.00';
+                // Reseta os campos de desempenho do estoque
+                totalStockCostSpan.textContent = 'R$ 0.00';
+                totalStockSuggestedSellingPriceSpan.textContent = 'R$ 0.00';
+                totalStockActualSoldPriceSpan.textContent = 'R$ 0.00';
+                totalStockPotentialProfitSuggestedSpan.textContent = 'R$ 0.00';
+                totalStockPotentialProfitActualSpan.textContent = 'R$ 0.00';
+                // Reseta os campos de desempenho do markup
+                markupReportRevenueSpan.textContent = 'R$ 0.00';
+                markupReportVariableExpensesSpan.textContent = 'R$ 0.00';
+                markupReportFixedExpensesSpan.textContent = 'R$ 0.00';
+                markupReportProfitMarginSpan.textContent = '0.00%';
+                markupReportMarkupMultiplierSpan.textContent = '0.00';
+                // Reseta os campos de ponto de equilíbrio
+                breakEvenRevenueSpan.textContent = 'R$ 0.00';
+                breakEvenProgressBar.style.width = '0%';
+                breakEvenProgressBar.style.backgroundColor = '#e0e0e0';
+                breakEvenProgressText.textContent = '0.00%';
+                currentSalesProgressSpan.textContent = 'R$ 0.00';
+                // Reseta os campos de resumo de caixa
+                reportCashBalanceSpan.textContent = 'R$ 0.00';
+                reportTotalInflowsSpan.textContent = 'R$ 0.00';
+                reportTotalOutflowsSpan.textContent = 'R$ 0.00';
+                // Reseta os campos de resumo de capital de giro
+                reportWorkingCapitalSpan.textContent = 'R$ 0.00';
+                reportCurrentAssetsSpan.textContent = 'R$ 0.00';
+                reportCurrentLiabilitiesSpan.textContent = 'R$ 0.00';
+                return;
+            }
+
+            let totalUnitsInStock = 0;
+            let totalUnitCostSum = 0; // Soma do custo unitário inicial
+            let totalSuggestedSellingPriceSum = 0; // Soma do preço de venda sugerido por unidade
+            let totalActualSoldPricePerUnitSum = 0; // Soma do preço de venda real por unidade
+
+            let totalStockCostValue = 0; // Valor total do estoque ao custo
+            let totalStockSuggestedSellingPriceValue = 0; // Valor total do estoque ao preço de venda sugerido
+            let totalStockActualSoldPriceValue = 0; // Valor total do estoque ao preço de venda real definido
+
+            products.forEach(product => {
+                const unitCost = product['Individual Cost (R$)'] + product['Freight Cost (R$)'];
+                totalUnitsInStock += product['Quantity in Stock'];
+                totalUnitCostSum += unitCost;
+                totalSuggestedSellingPriceSum += product['Suggested Selling Price (R$)'];
+                totalActualSoldPricePerUnitSum += product['Actual Selling Price (R$)'];
+                
+                // Acumula valores de desempenho do estoque (multiplicado pela quantidade)
+                totalStockCostValue += unitCost * product['Quantity in Stock'];
+                totalStockSuggestedSellingPriceValue += product['Suggested Selling Price (R$)'] * product['Quantity in Stock'];
+                totalStockActualSoldPriceValue += product['Actual Selling Price (R$)'] * product['Quantity in Stock'];
+            });
+
+            // Calcula lucros potenciais para o estoque
+            const totalStockPotentialProfitSuggestedValue = totalStockSuggestedSellingPriceValue - totalStockCostValue;
+            const totalStockPotentialProfitActualValue = totalStockActualSoldPriceValue - totalStockCostValue;
+
+
+            const numProducts = products.length; // Número de tipos de produtos únicos
+            const avgUnitCost = numProducts > 0 ? totalUnitCostSum / numProducts : 0;
+            const avgSuggestedSellingPrice = numProducts > 0 ? totalSuggestedSellingPriceSum / numProducts : 0;
+            const avgActualSoldPrice = numProducts > 0 ? totalActualSoldPricePerUnitSum / numProducts : 0;
+            
+            // Recalcula markups médios com base nos preços médios
+            const avgSuggestedMarkup = avgUnitCost > 0 ? avgSuggestedSellingPrice / avgUnitCost : 0;
+            const avgRealMarkup = avgUnitCost > 0 ? avgActualSoldPrice / avgUnitCost : 0;
+
+
+            let salesWithGain = 0;
+            let salesWithLoss = 0;
+            let salesNeutral = 0;
+            let totalRevenueFromActualSales = 0;
+            let totalRevenueFromSuggestedSales = 0;
+
+            salesRecords.forEach(sale => {
+                totalRevenueFromActualSales += sale['Total Actual Sold Price (R$)'];
+                totalRevenueFromSuggestedSales += sale['Total Suggested Selling Price (R$)'];
+
+                const gainLossPerUnit = (sale['Actual Sold Price Per Unit (R$)'] - sale['Suggested Selling Price Per Unit at Sale (R$)']);
+                if (gainLossPerUnit > 0) {
+                    salesWithGain++;
+                } else if (gainLossPerUnit < 0) {
+                    salesWithLoss++;
+                } else {
+                    salesNeutral++;
+                }
+            });
+
+            let overallGainLossPercentage = 0;
+            if (totalRevenueFromSuggestedSales > 0) {
+                overallGainLossPercentage = ((totalRevenueFromActualSales - totalRevenueFromSuggestedSales) / totalRevenueFromSuggestedSales) * 100;
+            }
+
+            totalProductsCountSpan.textContent = totalUnitsInStock;
+            avgUnitCostSpan.textContent = `R$ ${avgUnitCost.toFixed(2)}`;
+            avgSuggestedSellingPriceSpan.textContent = `R$ ${avgSuggestedSellingPrice.toFixed(2)}`;
+            avgActualSoldPriceSpan.textContent = `R$ ${avgActualSoldPrice.toFixed(2)}`;
+            avgSuggestedMarkupSpan.textContent = avgSuggestedMarkup.toFixed(2);
+            avgRealMarkupSpan.textContent = avgRealMarkup.toFixed(2);
+            
+            productsWithGainSpan.textContent = salesWithGain;
+            productsWithLossSpan.textContent = salesWithLoss;
+            productsNeutralSpan.textContent = salesNeutral;
+            overallGainLossPercentageSpan.textContent = `${overallGainLossPercentage.toFixed(2)}%`;
+            totalActualRevenueSpan.textContent = `R$ ${totalRevenueFromActualSales.toFixed(2)}`;
+
+            // Atualiza novos campos de desempenho do estoque
+            totalStockCostSpan.textContent = `R$ ${totalStockCostValue.toFixed(2)}`;
+            totalStockSuggestedSellingPriceSpan.textContent = `R$ ${totalStockSuggestedSellingPriceValue.toFixed(2)}`;
+            totalStockActualSoldPriceSpan.textContent = `R$ ${totalStockActualSoldPriceValue.toFixed(2)}`;
+            totalStockPotentialProfitSuggestedSpan.textContent = `R$ ${totalStockPotentialProfitSuggestedValue.toFixed(2)}`;
+            totalStockPotentialProfitActualSpan.textContent = `R$ ${totalStockPotentialProfitActualValue.toFixed(2)}`;
+
+            // --- Desempenho Geral do Markup ---
+            const markupRevenue = markupData.revenue || 0;
+            const markupVarExp = markupData.variableExpensesDetails.reduce((sum, exp) => sum + exp.Amount, 0); // Usa .Amount
+            const markupFixExp = markupData.fixedExpensesDetails.reduce((sum, exp) => sum + exp.Amount, 0); // Usa .Amount
+            const markupProfitMargin = markupData.profitMargin || 0;
+
+            markupReportRevenueSpan.textContent = `R$ ${markupRevenue.toFixed(2)}`;
+            markupReportVariableExpensesSpan.textContent = `R$ ${markupVarExp.toFixed(2)}`;
+            markupReportFixedExpensesSpan.textContent = `R$ ${markupFixExp.toFixed(2)}`;
+            markupReportProfitMarginSpan.textContent = `${markupProfitMargin.toFixed(2)}%`;
+
+            let calculatedMarkupMultiplier = 0;
+            if (markupRevenue > 0) {
+                const varExpPerc = (markupVarExp / markupRevenue) * 100;
+                const fixExpPerc = (markupFixExp / markupRevenue) * 100;
+                const sumPerc = varExpPerc + fixExpPerc + markupProfitMargin;
+                if (sumPerc < 100) {
+                    calculatedMarkupMultiplier = 100 / (100 - sumPerc);
+                }
+            }
+            markupReportMarkupMultiplierSpan.textContent = calculatedMarkupMultiplier.toFixed(2);
+
+            // --- Ponto de Equilíbrio e Acompanhamento de Vendas ---
+            let breakEvenRevenueValue = 0;
+            if (markupRevenue > 0 && calculatedMarkupMultiplier > 0) {
+                const cogsPercentage = (100 / calculatedMarkupMultiplier);
+                const totalVariablePercentage = (markupVarExp / markupRevenue) * 100 + cogsPercentage;
+
+                if (totalVariablePercentage < 100) {
+                    breakEvenRevenueValue = markupFixExp / (1 - (totalVariablePercentage / 100));
+                } else {
+                    breakEvenRevenueValue = Infinity;
+                }
+            }
+            
+            breakEvenRevenueSpan.textContent = `R$ ${breakEvenRevenueValue !== Infinity ? breakEvenRevenueValue.toFixed(2) : 'Inatingível'}`;
+
+            currentSalesProgressSpan.textContent = `R$ ${totalRevenueFromActualSales.toFixed(2)}`;
+
+            let progressPercentage = 0;
+            if (breakEvenRevenueValue > 0 && breakEvenRevenueValue !== Infinity) {
+                progressPercentage = (totalRevenueFromActualSales / breakEvenRevenueValue) * 100;
+                if (progressPercentage > 100) progressPercentage = 100;
+            }
+
+            breakEvenProgressBar.style.width = `${progressPercentage.toFixed(2)}%`;
+            breakEvenProgressText.textContent = `${progressPercentage.toFixed(2)}%`;
+
+            if (progressPercentage >= 100) {
+                breakEvenProgressBar.style.backgroundColor = '#4CAF50';
+                breakEvenProgressText.style.color = 'white';
+            } else if (progressPercentage > 50) {
+                breakEvenProgressBar.style.backgroundColor = '#FFC107';
+                breakEvenProgressText.style.color = 'black';
+            } else {
+                breakEvenProgressBar.style.backgroundColor = '#F44336';
+                breakEvenProgressText.style.color = 'white';
+            }
+            if (progressPercentage < 20 && progressPercentage > 0) {
+                breakEvenProgressText.style.color = '#333';
+                breakEvenProgressText.style.left = '50%';
+                breakEvenProgressText.style.transform = 'translateX(-50%)';
+            } else {
+                breakEvenProgressText.style.position = 'static';
+                breakEvenProgressText.style.transform = 'none';
+            }
+
+            // --- Resumo de Caixa no Relatório ---
+            const currentBalance = calculateCashBalance();
+            reportCashBalanceSpan.textContent = `R$ ${currentBalance.toFixed(2)}`;
+
+            let totalInflows = cashFlowRecords.filter(m => m.Type === 'inflow' || m.Type === 'sale_inflow' || m.Type === 'opening').reduce((sum, m) => sum + m['Amount (R$)'], 0);
+            let totalOutflows = cashFlowRecords.filter(m => m.Type === 'outflow' || m.Type === 'closing').reduce((sum, m) => sum + m['Amount (R$)'], 0);
+            
+            reportTotalInflowsSpan.textContent = `R$ ${totalInflows.toFixed(2)}`;
+            reportTotalOutflowsSpan.textContent = `R$ ${totalOutflows.toFixed(2)}`;
+
+            // --- Resumo de Capital de Giro no Relatório ---
+            const totalInventoryValueReport = products.reduce((sum, product) => sum + ((product['Individual Cost (R$)'] + product['Freight Cost (R$)']) * product['Quantity in Stock']), 0);
+            const totalOtherAssetsReport = workingCapitalDetails.otherAssets.reduce((sum, asset) => sum + asset['Value (R$)'], 0);
+            const totalLiabilitiesReport = workingCapitalDetails.liabilities.reduce((sum, liability) => sum + liability['Value (R$)'], 0);
+
+            const totalCurrentAssetsReport = currentBalance + totalInventoryValueReport + totalOtherAssetsReport;
+            const workingCapitalReport = totalCurrentAssetsReport - totalLiabilitiesReport;
+
+            reportWorkingCapitalSpan.textContent = `R$ ${workingCapitalReport.toFixed(2)}`;
+            reportCurrentAssetsSpan.textContent = `R$ ${totalCurrentAssetsReport.toFixed(2)}`;
+            reportCurrentLiabilitiesSpan.textContent = `R$ ${totalLiabilitiesReport.toFixed(2)}`;
+        }
+
+        // --- Funções de Exportar/Importar Todos os Dados (CSV local) ---
+        // Estas funções agora exportam os dados atualmente carregados na memória, que vêm do Google Sheets.
+        function exportAllDataToCSV() {
+            let csvContent = "";
+
+            csvContent += "[PRODUTOS]\n";
+            csvContent += '"Name";"Individual Cost (R$)";"Freight Cost (R$)";"Quantity in Stock";"Markup Suggested";"Suggested Selling Price (R$)";"Actual Selling Price (R$)"\n';
+            products.forEach(product => {
+                csvContent += `"${product.Name.replace(/"/g, '""')}";${product['Individual Cost (R$)'].toFixed(2).replace('.', ',')};${product['Freight Cost (R$)'].toFixed(2).replace('.', ',')};${product['Quantity in Stock']};${product['Markup Suggested'].toFixed(2).replace('.', ',')};${product['Suggested Selling Price (R$)'].toFixed(2).replace('.', ',')};${product['Actual Selling Price (R$)'].toFixed(2).replace('.', ',')}\n`;
+            });
+            csvContent += "\n";
+
+            csvContent += "[VENDAS]\n";
+            csvContent += '"Transaction ID";"Product Name";"Quantity Sold";"Actual Sold Price Per Unit (R$)";"Total Actual Sold Price (R$)";"Unit Cost at Sale (R$)";"Suggested Selling Price Per Unit at Sale (R$)";"Total Suggested Selling Price at Sale (R$)";"Sale Date"\n';
+            salesRecords.forEach(sale => {
+                csvContent += `"${sale['Transaction ID'] || ''}";"${sale['Product Name'].replace(/"/g, '""')}";${sale['Quantity Sold']};${sale['Actual Sold Price Per Unit (R$)'].toFixed(2).replace('.', ',')};${sale['Total Actual Sold Price (R$)'].toFixed(2).replace('.', ',')};${sale['Unit Cost at Sale (R$)'].toFixed(2).replace('.', ',')};${sale['Suggested Selling Price Per Unit at Sale (R$)'].toFixed(2).replace('.', ',')};${sale['Total Suggested Selling Price at Sale (R$)'].toFixed(2).replace('.', ',')};${sale['Sale Date']}\n`;
+            });
+            csvContent += "\n";
+
+            csvContent += "[MOVIMENTACOES_CAIXA]\n";
+            csvContent += '"ID";"Date";"Type";"Description";"Amount (R$)"\n';
+            cashFlowRecords.forEach(movement => {
+                csvContent += `"${movement.ID}";"${movement.Date}";"${movement.Type}";"${movement.Description.replace(/"/g, '""')}";${movement['Amount (R$)'].toFixed(2).replace('.', ',')}\n`;
+            });
+            csvContent += "\n";
+
+            csvContent += "[CAPITAL_DE_GIRO_ATIVOS]\n";
+            csvContent += '"Description";"Value (R$)"\n';
+            workingCapitalDetails.otherAssets.forEach(asset => {
+                csvContent += `"${asset.Description.replace(/"/g, '""')}";${asset['Value (R$)'].toFixed(2).replace('.', ',')}\n`;
+            });
+            csvContent += "\n";
+
+            csvContent += "[CAPITAL_DE_GIRO_PASSIVOS]\n";
+            csvContent += '"Description";"Value (R$)"\n';
+            workingCapitalDetails.liabilities.forEach(liability => {
+                csvContent += `"${liability.Description.replace(/"/g, '""')}";${liability['Value (R$)'].toFixed(2).replace('.', ',')}\n`;
+            });
+            csvContent += "\n";
+
+            csvContent += "[MARKUP_DATA]\n";
+            csvContent += `"Revenue";${markupData.revenue.toFixed(2).replace('.', ',')}\n`;
+            csvContent += `"Profit Margin";${markupData.profitMargin.toFixed(2).replace('.', ',')}\n`;
+            csvContent += "Variable Expenses;\n";
+            markupData.variableExpensesDetails.forEach(exp => {
+                csvContent += `"${exp.Description.replace(/"/g, '""')}";${exp.Amount.toFixed(2).replace('.', ',')}\n`; // Usa .Description e .Amount
+            });
+            csvContent += "Fixed Expenses;\n";
+            markupData.fixedExpensesDetails.forEach(exp => {
+                csvContent += `"${exp.Description.replace(/"/g, '""')}";${exp.Amount.toFixed(2).replace('.', ',')}\n`; // Usa .Description e .Amount
+            });
+            csvContent += "\n";
+
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'dados_pdv_unificados.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                showInfoModal('Dados exportados com sucesso para dados_pdv_unificados.csv!');
+            } else {
+                showInfoModal('O seu navegador não suporta a exportação direta de arquivos CSV. Por favor, copie o texto abaixo e cole numa planilha:\n\n' + csvContent);
+            }
+        }
+
+        /**
+         * Inicia o processo de importação de todos os dados de um arquivo CSV local para o Google Sheets.
+         */
+        async function importAllDataFromCSV() {
+            showConfirmationModal('Importar dados substituirá todos os produtos, registos de vendas, movimentações de caixa e dados de capital de giro existentes no Google Sheets. Tem certeza que deseja continuar?', async () => {
+                importAllDataFile.value = '';
+                importAllDataFile.click();
+                hideConfirmationModal();
+            });
+        }
+
+        importAllDataFile.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) { return; }
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const csvText = e.target.result;
+                const lines = csvText.replace(/\r\n/g, '\n').split('\n').map(line => line.trim()).filter(line => line !== '');
+
+                if (lines.length === 0) {
+                    showInfoModal('O ficheiro CSV está vazio ou não contém dados válidos.');
+                    return;
+                }
+
+                let currentSection = null;
+                const importedProducts = [];
+                const importedSales = [];
+                const importedCashMovements = [];
+                const importedOtherAssets = [];
+                const importedLiabilities = [];
+                let importedMarkupRevenue = 0;
+                let importedMarkupProfitMargin = 0;
+                const importedMarkupVariableExpensesDetails = [];
+                const importedMarkupFixedExpensesDetails = [];
+                const importErrors = [];
+
+                const parseString = (value) => value ? value.replace(/^"|"$/g, '').trim() : '';
+                const parseFloatLocalized = (value) => parseFloat(value ? value.replace(/^"|"$/g, '').replace(',', '.') : '0');
+                const parseIntLocalized = (value) => parseInt(value ? value.replace(/^"|"$/g, '').replace(',', '.') : '0');
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+
+                    if (line === '[PRODUTOS]') { currentSection = 'PRODUCTS'; i++; continue; }
+                    else if (line === '[VENDAS]') { currentSection = 'SALES'; i++; continue; }
+                    else if (line === '[MOVIMENTACOES_CAIXA]') { currentSection = 'CASH_MOVEMENTS'; i++; continue; }
+                    else if (line === '[CAPITAL_DE_GIRO_ATIVOS]') { currentSection = 'WORKING_CAPITAL_ASSETS'; i++; continue; }
+                    else if (line === '[CAPITAL_DE_GIRO_PASSIVOS]') { currentSection = 'WORKING_CAPITAL_LIABILITIES'; i++; continue; }
+                    else if (line === '[MARKUP_DATA]') { currentSection = 'MARKUP_DATA'; continue; }
+                    else if (line.startsWith('"Revenue";') && currentSection === 'MARKUP_DATA') {
+                        const columns = line.split(';');
+                        if (columns.length >= 2) importedMarkupRevenue = parseFloatLocalized(columns[1]);
+                        continue;
+                    } else if (line.startsWith('"Profit Margin";') && currentSection === 'MARKUP_DATA') {
+                        const columns = line.split(';');
+                        if (columns.length >= 2) importedMarkupProfitMargin = parseFloatLocalized(columns[1]);
+                        continue;
+                    } else if (line === "Variable Expenses;" && currentSection === 'MARKUP_DATA') {
+                        let j = i + 1;
+                        while (lines[j] && !lines[j].startsWith("[") && lines[j].trim() !== "" && lines[j].trim() !== "Fixed Expenses;") {
+                            const expCols = lines[j].split(';');
+                            if (expCols.length >= 2) {
+                                const description = parseString(expCols[0]);
+                                const amount = parseFloatLocalized(expCols[1]);
+                                if (description && !isNaN(amount)) importedMarkupVariableExpensesDetails.push({ 'Description': description, 'Amount': amount });
+                                else importErrors.push(`Erro na linha ${j + 1} (Despesas Variáveis Detalhadas): Dados inválidos. Linha: "${lines[j]}"`);
+                            }
+                            j++;
+                        }
+                        i = j - 1; continue;
+                    } else if (line === "Fixed Expenses;" && currentSection === 'MARKUP_DATA') {
+                        let j = i + 1;
+                        while (lines[j] && !lines[j].startsWith("[") && lines[j].trim() !== "") {
+                            const expCols = lines[j].split(';');
+                            if (expCols.length >= 2) {
+                                const description = parseString(expCols[0]);
+                                const amount = parseFloatLocalized(expCols[1]);
+                                if (description && !isNaN(amount)) importedMarkupFixedExpensesDetails.push({ 'Description': description, 'Amount': amount });
+                                else importErrors.push(`Erro na linha ${j + 1} (Despesas Fixas Detalhadas): Dados inválidos. Linha: "${lines[j]}"`);
+                            }
+                            j++;
+                        }
+                        i = j - 1; continue;
+                    }
+
+                    const columns = line.split(';');
+
+                    if (currentSection === 'PRODUCTS') {
+                        if (columns.length === 7) {
+                            try {
+                                importedProducts.push({
+                                    'Name': parseString(columns[0]),
+                                    'Individual Cost (R$)': parseFloatLocalized(columns[1]),
+                                    'Freight Cost (R$)': parseFloatLocalized(columns[2]),
+                                    'Quantity in Stock': parseIntLocalized(columns[3]),
+                                    'Markup Suggested': parseFloatLocalized(columns[4]),
+                                    'Suggested Selling Price (R$)': parseFloatLocalized(columns[5]),
+                                    'Actual Selling Price (R$)': parseFloatLocalized(columns[6])
+                                });
+                            } catch (e) { importErrors.push(`Erro na linha ${i + 1} (Produtos): ${e.message}. Linha: "${line}"`); }
+                        } else if (line !== "") { importErrors.push(`Formato inválido na linha ${i + 1} (Produtos). Esperado 7 colunas. Linha: "${line}"`); }
+                    } else if (currentSection === 'SALES') {
+                        if (columns.length >= 9) {
+                            try {
+                                importedSales.push({
+                                    'Transaction ID': parseString(columns[0]),
+                                    'Product Name': parseString(columns[1]),
+                                    'Quantity Sold': parseIntLocalized(columns[2]),
+                                    'Actual Sold Price Per Unit (R$)': parseFloatLocalized(columns[3]),
+                                    'Total Actual Sold Price (R$)': parseFloatLocalized(columns[4]),
+                                    'Unit Cost at Sale (R$)': parseFloatLocalized(columns[5]),
+                                    'Suggested Selling Price Per Unit at Sale (R$)': parseFloatLocalized(columns[6]),
+                                    'Total Suggested Selling Price at Sale (R$)': parseFloatLocalized(columns[7]),
+                                    'Sale Date': parseString(columns[8])
+                                });
+                            } catch (e) { importErrors.push(`Erro na linha ${i + 1} (Vendas): ${e.message}. Linha: "${line}"`); }
+                        } else if (line !== "") { importErrors.push(`Formato inválido na linha ${i + 1} (Vendas). Esperado pelo menos 9 colunas. Linha: "${line}"`); }
+                    } else if (currentSection === 'CASH_MOVEMENTS') {
+                        if (columns.length === 5) {
+                            try {
+                                importedCashMovements.push({
+                                    'ID': parseString(columns[0]),
+                                    'Date': parseString(columns[1]),
+                                    'Type': parseString(columns[2]),
+                                    'Description': parseString(columns[3]),
+                                    'Amount (R$)': parseFloatLocalized(columns[4])
+                                });
+                            } catch (e) { importErrors.push(`Erro na linha ${i + 1} (Movimentações de Caixa): ${e.message}. Linha: "${line}"`); }
+                        } else if (line !== "") { importErrors.push(`Formato inválido na linha ${i + 1} (Movimentações de Caixa). Esperado 5 colunas. Linha: "${line}"`); }
+                    } else if (currentSection === 'WORKING_CAPITAL_ASSETS') {
+                        if (columns.length === 2) {
+                            try {
+                                importedOtherAssets.push({
+                                    'Description': parseString(columns[0]),
+                                    'Value (R$)': parseFloatLocalized(columns[1])
+                                });
+                            } catch (e) { importErrors.push(`Erro na linha ${i + 1} (Ativos de Capital de Giro): ${e.message}. Linha: "${line}"`); }
+                        } else if (line !== "") { importErrors.push(`Formato inválido na linha ${i + 1} (Ativos de Capital de Giro). Esperado 2 colunas. Linha: "${line}"`); }
+                    } else if (currentSection === 'WORKING_CAPITAL_LIABILITIES') {
+                        if (columns.length === 2) {
+                            try {
+                                importedLiabilities.push({
+                                    'Description': parseString(columns[0]),
+                                    'Value (R$)': parseFloatLocalized(columns[1])
+                                });
+                            } catch (e) { importErrors.push(`Erro na linha ${i + 1} (Passivos de Capital de Giro): ${e.message}. Linha: "${line}"`); }
+                        } else if (line !== "") { importErrors.push(`Formato inválido na linha ${i + 1} (Passivos de Capital de Giro). Esperado 2 colunas. Linha: "${line}"`); }
+                    }
+                }
+
+                if (importErrors.length > 0) {
+                    const errorSummary = importErrors.join('\n');
+                    showInfoModal('Erros encontrados durante a importação:\n\n' + errorSummary);
+                    return;
+                }
+
+                // Envia todos os dados importados para o Google Sheets
+                await sendDataToGoogleSheets('clearAllAndAdd', 'Products', importedProducts);
+                await sendDataToGoogleSheets('clearAllAndAdd', 'Sales', importedSales);
+                await sendDataToGoogleSheets('clearAllAndAdd', 'Cash Movements', importedCashMovements);
+                await sendDataToGoogleSheets('clearAllAndAdd', 'Working Capital - Assets', importedOtherAssets);
+                await sendDataToGoogleSheets('clearAllAndAdd', 'Working Capital - Liabilities', importedLiabilities);
+                
+                await sendDataToGoogleSheets('updateMarkup', 'Markup Data', {
+                    revenue: importedMarkupRevenue,
+                    profitMargin: importedMarkupProfitMargin
+                });
+                await sendDataToGoogleSheets('clearAndAdd', 'Variable Expenses', importedMarkupVariableExpensesDetails);
+                await sendDataToGoogleSheets('clearAndAdd', 'Fixed Expenses', importedMarkupFixedExpensesDetails);
+
+                await loadAllDataFromSheets();
+                showInfoModal('Dados importados e atualizados com sucesso no Google Sheets!');
+            };
+            reader.onerror = () => { showInfoModal('Erro ao ler o ficheiro.'); };
+            reader.readAsText(file);
+        });
+
+        // --- Função para atualizar os campos de custo calculado na UI ---
+        /**
+         * Atualiza os campos de custo unitário e custo total do lote na UI.
+         */
+        function updateCalculatedCosts() {
+            const individualCost = parseFloat(individualProductCostInput.value) || 0;
+            const freightCost = parseFloat(freightCostPerUnitInput.value) || 0;
+            const quantity = parseInt(productQuantityInput.value) || 0;
+
+            const calculatedUnitCost = individualCost + freightCost;
+            const calculatedTotalCost = calculatedUnitCost * quantity;
+
+            calculatedUnitCostDisplay.value = calculatedUnitCost.toFixed(2);
+            calculatedTotalProductCostDisplay.value = calculatedTotalCost.toFixed(2);
+        }
+
+        // --- Inicialização e Listeners ---
+        /**
+         * Ajusta o padding do corpo da página para acomodar o cabeçalho fixo.
+         */
+        function adjustBodyPadding() {
+            if (mainHeader) {
+                const headerHeight = mainHeader.offsetHeight;
+                document.body.style.paddingTop = `${headerHeight}px`;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            adjustBodyPadding();
+            // Carrega os dados iniciais do Google Sheets quando a página carrega
+            if (googleSheetsUrl && googleSheetsUrl !== 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
+                await loadAllDataFromSheets();
+            } else {
+                showInfoModal('Por favor, insira a URL do Google Apps Script na seção "Configuração do Google Sheets" para carregar ou salvar dados.');
+            }
+
+            individualProductCostInput.addEventListener('input', updateCalculatedCosts);
+            freightCostPerUnitInput.addEventListener('input', updateCalculatedCosts);
+            productQuantityInput.addEventListener('input', updateCalculatedCosts);
+
+            totalMonthlyRevenueInput.addEventListener('input', async () => {
+                await updateMarkupDataInSheets();
+                calculateMarkup();
+            });
+            profitMarginInput.addEventListener('input', async () => {
+                await updateMarkupDataInSheets();
+                calculateMarkup();
+            });
+
+            document.querySelectorAll('.toggle-section-btn').forEach(button => {
+                const targetId = button.dataset.target;
+                const targetContent = document.getElementById(targetId);
+                if (targetContent) {
+                    button.addEventListener('click', () => {
+                        toggleSectionVisibility(targetContent, button);
+                    });
+                }
+            });
+        });
+
+        window.addEventListener('resize', adjustBodyPadding);
+
+        hamburgerBtn.addEventListener('click', toggleMenu);
+        sidebarOverlay.addEventListener('click', toggleMenu);
+
+        document.getElementById('linkMarkup').addEventListener('click', (e) => {
+            e.preventDefault();
+            showCalculator('markupCalculatorSection');
+        });
+
+        document.getElementById('linkSellingPrice').addEventListener('click', (e) => {
+            e.preventDefault();
+            showCalculator('sellingPriceCalculatorSection');
+        });
+
+        document.getElementById('linkCashControl').addEventListener('click', (e) => {
+            e.preventDefault();
+            showCalculator('cashControlSection');
+        });
+
+        document.getElementById('linkWorkingCapital').addEventListener('click', (e) => {
+            e.preventDefault();
+            showCalculator('workingCapitalSection');
+        });
+
+        document.getElementById('linkReport').addEventListener('click', (e) => {
+            e.preventDefault();
+            showCalculator('reportSection');
+        });
+
+        calculateSellingPriceBtn.addEventListener('click', handleSellingPriceCalculation);
+        importMarkupBtn.addEventListener('click', importMarkupFromCSV);
+        addVariableExpenseBtn.addEventListener('click', async () => {
+            await addVariableExpenseRow();
+            await updateMarkupDataInSheets();
+            calculateMarkup();
+        });
+        addFixedExpenseBtn.addEventListener('click', async () => {
+            await addFixedExpenseRow();
+            await updateMarkupDataInSheets();
+            calculateMarkup();
+        });
+
+        clearMarkupDataBtn.addEventListener('click', clearMarkupData);
+
+        confirmYesBtn.addEventListener('click', () => {
+            if (onConfirmCallback) {
+                onConfirmCallback();
+            }
+        });
+        confirmNoBtn.addEventListener('click', hideConfirmationModal);
+
+        closeImageModalBtn.addEventListener('click', hideImageModal);
+        imageModalOverlay.addEventListener('click', (event) => {
+            if (event.target === imageModalOverlay) {
+                hideImageModal();
+            }
+        });
+
+        searchProductInput.addEventListener('input', searchProducts);
+        clearSearchBtn.addEventListener('click', () => {
+            searchProductInput.value = '';
+            renderProductList();
+        });
+
+        addItemToSaleBtn.addEventListener('click', addItemToCurrentSale);
+        recordSaleBtn.addEventListener('click', handleRecordSale);
+
+        salesModalBtn.addEventListener('click', showSalesModal);
+        closeSalesModalBtn.addEventListener('click', hideSalesModal);
+        salesEntryModalOverlay.addEventListener('click', (event) => {
+            if (event.target === salesEntryModalOverlay) {
+                hideSalesModal();
+            }
+        });
+
+        addCashMovementBtn.addEventListener('click', addCashMovement);
+        addOtherAssetBtn.addEventListener('click', async () => {
+            await addOtherAssetRow();
+            await updateWorkingCapitalDetailsInSheets();
+            calculateWorkingCapital();
+        });
+        addLiabilityBtn.addEventListener('click', async () => {
+            await addLiabilityRow();
+            await updateWorkingCapitalDetailsInSheets();
+            calculateWorkingCapital();
+        });
+
+        exportAllDataBtn.addEventListener('click', exportAllDataToCSV);
+        importAllDataBtn.addEventListener('click', importAllDataFromCSV);
+
+        // Salva a URL e carrega os dados
+        saveSheetsUrlBtn.addEventListener('click', async () => {
+            const newUrl = googleSheetsUrlInput.value.trim();
+            if (newUrl) {
+                localStorage.setItem('googleSheetsUrl', newUrl);
+                googleSheetsUrl = newUrl;
+                await loadAllDataFromSheets();
+            } else {
+                displayError('Por favor, insira uma URL válida para o Google Apps Script.', googleSheetsErrorMessageDiv);
+            }
+        });
+
+        // Carregar URL do localStorage na inicialização
+        const savedUrl = localStorage.getItem('googleSheetsUrl');
+        if (savedUrl) {
+            googleSheetsUrl = savedUrl;
+            googleSheetsUrlInput.value = savedUrl;
+        }
+    </script>
+</body>
+</html>
