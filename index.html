@@ -204,24 +204,6 @@
             font-weight: bold;
             font-size: 0.875rem; /* text-sm */
         }
-
-        /* Loading Spinner */
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            border-left-color: #3182ce;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            vertical-align: middle;
-            margin-right: 8px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
@@ -240,7 +222,6 @@
             <button id="salesModalBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
                 Nova Venda
             </button>
-            <div id="importSheetsLoadingIndicator" class="spinner hidden"></div>
         </div>
     </header>
 
@@ -401,22 +382,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Seção de Integração Google Sheets -->
-            <div class="mb-6 p-4 border border-green-200 rounded-lg bg-green-50">
-                <h2 class="text-xl font-semibold text-gray-800 mb-4">Configuração do Google Sheets</h2>
-                <div class="mb-4">
-                    <label for="googleSheetsUrl" class="block text-gray-700 text-sm font-semibold mb-2">URL do Google Apps Script (Web App):</label>
-                    <input type="text" id="googleSheetsUrl" class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" placeholder="Cole a URL do seu Apps Script aqui">
-                </div>
-                <button id="saveSheetsUrlBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
-                    Salvar URL e Carregar Dados
-                </button>
-                <div id="googleSheetsErrorMessage" class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg hidden" role="alert">
-                    <!-- Mensagens de erro da integração com Google Sheets -->
-                </div>
-            </div>
-
 
             <!-- Seção de Lista de Produtos -->
             <div id="productListSection" class="mt-6 p-4 bg-gray-100 rounded-lg border border-gray-300">
@@ -867,12 +832,6 @@
         const searchProductInput = document.getElementById('searchProductInput');
         const clearSearchBtn = document.getElementById('clearSearchBtn');
 
-        // --- Elementos de Integração Google Sheets ---
-        const googleSheetsUrlInput = document.getElementById('googleSheetsUrl');
-        const saveSheetsUrlBtn = document.getElementById('saveSheetsUrlBtn');
-        const googleSheetsErrorMessageDiv = document.getElementById('googleSheetsErrorMessage');
-        const importSheetsLoadingIndicator = document.getElementById('importSheetsLoadingIndicator'); // This spinner will be used for all sheet operations
-
         // --- Elementos do Lançamento de Vendas (agora no modal) ---
         const salesModalBtn = document.getElementById('salesModalBtn');
         const salesEntryModalOverlay = document.getElementById('salesEntryModalOverlay');
@@ -961,266 +920,217 @@
         const productListContent = document.getElementById('productListContent');
         const recentSalesContent = document.getElementById('recentSalesContent');
 
-        // --- Variáveis de Dados Globais (agora sincronizadas com Google Sheets) ---
-        let products = [];
-        let salesRecords = [];
-        let cashFlowRecords = [];
-        let workingCapitalDetails = { otherAssets: [], liabilities: [] };
-        let markupData = { revenue: 0, profitMargin: 0, variableExpensesDetails: [], fixedExpensesDetails: [] };
-        // AQUI: A URL do Google Apps Script deve ser atualizada com a sua URL de implantação.
-        let googleSheetsUrl = 'https://script.google.com/macros/s/AKfycbzKXZxUjzPnGc350MV2JUV8cW9CAhL9TOLwjVhVCM1Zek5MuN6t_x8N8u6DWh4Et-gaSA/exec'; // Substitua por sua URL real!
 
+        // Inicializa 'products' a partir do LocalStorage ou como um array vazio
+        let products = JSON.parse(localStorage.getItem('pricingProducts')) || [];
+        // Inicializa 'salesRecords' a partir do LocalStorage ou como um array vazio
+        let salesRecords = JSON.parse(localStorage.getItem('salesRecords')) || [];
+        // Inicializa 'cashFlowRecords' a partir do LocalStorage ou como um array vazio
+        let cashFlowRecords = JSON.parse(localStorage.getItem('cashFlowRecords')) || [];
+        // Inicializa 'workingCapitalDetails' a partir do LocalStorage ou como um objeto vazio
+        let workingCapitalDetails = JSON.parse(localStorage.getItem('workingCapitalDetails')) || {
+            otherAssets: [],
+            liabilities: []
+        };
+
+        // Array temporário para guardar os itens da venda atual no modal
         let currentSaleItems = [];
+
+        // Lógica de migração de dados para garantir compatibilidade com versões anteriores
+        products = products.map(product => {
+            const newProduct = { ...product };
+
+            if (newProduct.individualCost === undefined || isNaN(newProduct.individualCost)) {
+                if (newProduct.totalCost !== undefined && newProduct.quantity !== undefined && newProduct.quantity > 0) {
+                    newProduct.individualCost = newProduct.totalCost / newProduct.quantity;
+                } else {
+                    newProduct.individualCost = 0;
+                }
+            }
+            if (newProduct.freightCost === undefined || isNaN(newProduct.freightCost)) {
+                newProduct.freightCost = 0;
+            }
+
+            if (newProduct.quantity === undefined || isNaN(newProduct.quantity) || newProduct.quantity < 0) {
+                newProduct.quantity = 1;
+            }
+            
+            newProduct.initialUnitCost = newProduct.individualCost + newProduct.freightCost;
+            newProduct.totalCost = newProduct.initialUnitCost * newProduct.quantity;
+
+            if (newProduct.markup === undefined || isNaN(newProduct.markup)) {
+                newProduct.markup = 0;
+            }
+            if (newProduct.sellingPricePerUnit === undefined || isNaN(newProduct.sellingPricePerUnit)) {
+                newProduct.sellingPricePerUnit = newProduct.initialUnitCost * newProduct.markup;
+            }
+            if (newProduct.actualSoldPrice === undefined || isNaN(newProduct.actualSoldPrice) || newProduct.actualSoldPrice < 0) {
+                newProduct.actualSoldPrice = newProduct.sellingPricePerUnit;
+            }
+
+            return newProduct;
+        });
+        saveProductsToLocalStorage();
+
+        // Lógica de migração para salesRecords
+        salesRecords = salesRecords.map(sale => {
+            const newSale = { ...sale };
+
+            if (newSale.actualSoldPricePerUnitAtSale === undefined && newSale.actualSoldPriceAtSale !== undefined) {
+                newSale.actualSoldPricePerUnitAtSale = newSale.actualSoldPriceAtSale;
+                newSale.totalActualSoldPriceAtSale = newSale.actualSoldPriceAtSale * newSale.quantitySold;
+                delete newSale.actualSoldPriceAtSale;
+            } else if (newSale.actualSoldPricePerUnitAtSale === undefined) {
+                newSale.actualSoldPricePerUnitAtSale = 0;
+                newSale.totalActualSoldPriceAtSale = 0;
+            }
+
+            if (newSale.suggestedSellingPricePerUnitAtSale === undefined && newSale.sellingPricePerUnitAtSale !== undefined) {
+                newSale.suggestedSellingPricePerUnitAtSale = newSale.sellingPricePerUnitAtSale;
+                newSale.totalSuggestedSellingPriceAtSale = newSale.sellingPricePerUnitAtSale * newSale.quantitySold;
+                delete newSale.sellingPricePerUnitAtSale;
+            } else if (newSale.suggestedSellingPricePerUnitAtSale === undefined) {
+                newSale.suggestedSellingPriceAtSale = 0;
+                newSale.totalSuggestedSellingPriceAtSale = 0;
+            }
+            
+            if (newSale.unitCostAtSale === undefined || isNaN(newSale.unitCostAtSale)) {
+                newSale.unitCostAtSale = 0;
+            }
+
+            if (newSale.transactionId === undefined) {
+                newSale.transactionId = 'legacy-' + Math.random().toString(36).substring(2, 9);
+            }
+
+            return newSale;
+        });
+        saveSalesRecordsToLocalStorage();
+
+
         let editingProductIndex = -1;
 
-        // --- Funções de Comunicação com Google Apps Script ---
+        // --- Funções Auxiliares para LocalStorage ---
+        function saveProductsToLocalStorage() {
+            localStorage.setItem('pricingProducts', JSON.stringify(products));
+            populateProductDatalist();
+        }
 
-        /**
-         * Envia dados para o Google Apps Script (POST request).
-         * @param {string} action - Ação a ser realizada (e.g., 'add', 'update', 'delete').
-         * @param {string} sheetName - Nome da planilha a ser modificada.
-         * @param {object|Array<object>} data - Os dados a serem enviados. Para update/delete, deve incluir um identificador único.
-         * @param {string} [identifierKey] - Chave para identificar o registro em operações de update/delete (e.g., 'Name' para produtos).
-         * @param {any} [identifierValue] - Valor do identificador para update/delete.
-         * @returns {Promise<object>} Resposta do Apps Script.
-         */
-        async function sendDataToGoogleSheets(action, sheetName, data, identifierKey = null, identifierValue = null) {
-            if (!googleSheetsUrl || googleSheetsUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
-                displayError('URL do Google Apps Script não configurada. Por favor, insira a URL na seção "Configuração do Google Sheets".', googleSheetsErrorMessageDiv);
-                return { success: false, message: 'URL do Google Apps Script não configurada.' };
-            }
+        function saveSalesRecordsToLocalStorage() {
+            localStorage.setItem('salesRecords', JSON.stringify(salesRecords));
+        }
 
-            // Mostra o spinner e desabilita botões
-            importSheetsLoadingIndicator.classList.remove('hidden');
-            saveSheetsUrlBtn.disabled = true;
-            calculateSellingPriceBtn.disabled = true;
-            addCashMovementBtn.disabled = true;
-            addOtherAssetBtn.disabled = true;
-            addLiabilityBtn.disabled = true;
-            recordSaleBtn.disabled = true;
-            addItemToSaleBtn.disabled = true;
-            exportAllDataBtn.disabled = true;
-            importAllDataBtn.disabled = true;
+        function saveMarkupDataToLocalStorage() {
+            const variableExpenses = [];
+            document.querySelectorAll('#variableExpensesList .variable-expense-row').forEach(row => {
+                const description = row.querySelector('.variable-expense-description').value;
+                const amount = parseFloat(row.querySelector('.variable-expense-amount').value) || 0;
+                variableExpenses.push({ description, amount });
+            });
 
-            try {
-                const payload = {
-                    action: action,
-                    sheetName: sheetName,
-                    data: data
-                };
+            const fixedExpenses = [];
+            document.querySelectorAll('#fixedExpensesList .fixed-expense-row').forEach(row => {
+                const description = row.querySelector('.fixed-expense-description').value;
+                const amount = parseFloat(row.querySelector('.fixed-expense-amount').value) || 0;
+                fixedExpenses.push({ description, amount });
+            });
 
-                if (identifierKey && identifierValue !== null) {
-                    payload.identifierKey = identifierKey;
-                    payload.identifierValue = identifierValue;
+            const markupData = {
+                revenue: parseFloat(totalMonthlyRevenueInput.value) || 0,
+                variableExpensesDetails: variableExpenses,
+                fixedExpensesDetails: fixedExpenses,
+                profitMargin: parseFloat(profitMarginInput.value) || 0
+            };
+            localStorage.setItem('markupData', JSON.stringify(markupData));
+        }
+
+        function loadMarkupDataFromLocalStorage() {
+            const storedData = localStorage.getItem('markupData');
+            if (storedData) {
+                const markupData = JSON.parse(storedData);
+
+                totalMonthlyRevenueInput.value = markupData.revenue.toFixed(2);
+                profitMarginInput.value = markupData.profitMargin.toFixed(2);
+
+                variableExpensesList.innerHTML = '';
+                fixedExpensesList.innerHTML = '';
+
+                if (markupData.variableExpensesDetails && markupData.variableExpensesDetails.length > 0) {
+                    markupData.variableExpensesDetails.forEach(exp => {
+                        addVariableExpenseRow(exp.description, exp.amount.toFixed(2));
+                    });
+                } else if (markupData.variableExpenses !== undefined) {
+                    addVariableExpenseRow('Total de Despesas Variáveis (Antigo)', markupData.variableExpenses.toFixed(2));
                 }
-                
-                const response = await fetch(googleSheetsUrl, {
-                    method: 'POST',
-                    mode: 'cors',
-                    cache: 'no-cache',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Erro na requisição: ${response.status} ${response.statusText} - ${errorText}`);
+                if (markupData.fixedExpensesDetails && markupData.fixedExpensesDetails.length > 0) {
+                    markupData.fixedExpensesDetails.forEach(exp => {
+                        addFixedExpenseRow(exp.description, exp.amount.toFixed(2));
+                    });
+                } else if (markupData.fixedExpenses !== undefined) {
+                    addFixedExpenseRow('Total de Despesas Fixas (Antigo)', markupData.fixedExpenses.toFixed(2));
                 }
-                const result = await response.json();
-                if (!result.success) {
-                    throw new Error(result.message || 'Operação falhou no Google Apps Script.');
-                }
-                return result;
-            } catch (error) {
-                console.error(`Erro ao enviar dados para ${sheetName} (${action}):`, error);
-                displayError(`Erro ao ${action} dados em "${sheetName}": ${error.message}. Verifique a URL e a configuração do Apps Script.`, googleSheetsErrorMessageDiv);
-                return { success: false, message: error.message };
-            } finally {
-                // Esconde o spinner e reabilita botões
-                importSheetsLoadingIndicator.classList.add('hidden');
-                saveSheetsUrlBtn.disabled = false;
-                calculateSellingPriceBtn.disabled = false;
-                addCashMovementBtn.disabled = false;
-                addOtherAssetBtn.disabled = false;
-                addLiabilityBtn.disabled = false;
-                recordSaleBtn.disabled = false;
-                addItemToSaleBtn.disabled = false;
-                exportAllDataBtn.disabled = false;
-                importAllDataBtn.disabled = false;
+
+                calculateMarkup();
             }
         }
 
-        /**
-         * Busca dados de uma planilha específica no Google Apps Script (GET request).
-         * @param {string} sheetName - Nome da planilha a ser lida.
-         * @returns {Promise<Array<object>>} Array de objetos representando as linhas da planilha.
-         */
-        async function fetchSheetData(sheetName) {
-            if (!googleSheetsUrl || googleSheetsUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
-                displayError('URL do Google Apps Script não configurada. Por favor, insira a URL na seção "Configuração do Google Sheets".', googleSheetsErrorMessageDiv);
-                return [];
-            }
-
-            // Mostra o spinner e desabilita botões
-            importSheetsLoadingIndicator.classList.remove('hidden');
-            saveSheetsUrlBtn.disabled = true;
-            calculateSellingPriceBtn.disabled = true;
-            addCashMovementBtn.disabled = true;
-            addOtherAssetBtn.disabled = true;
-            addLiabilityBtn.disabled = true;
-            recordSaleBtn.disabled = true;
-            addItemToSaleBtn.disabled = true;
-            exportAllDataBtn.disabled = true;
-            importAllDataBtn.disabled = true;
-
-            try {
-                const url = new URL(googleSheetsUrl);
-                url.searchParams.append('action', 'get');
-                url.searchParams.append('sheetName', sheetName);
-
-                const response = await fetch(url.toString(), {
-                    method: 'GET',
-                    mode: 'cors',
-                    cache: 'no-cache'
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Erro na requisição: ${response.status} ${response.statusText} - ${errorText}`);
-                }
-                const result = await response.json();
-                if (!result.success) {
-                    throw new Error(result.message || 'Busca de dados falhou no Google Apps Script.');
-                }
-                return result.data || [];
-            } catch (error) {
-                console.error(`Erro ao buscar dados de ${sheetName}:`, error);
-                displayError(`Erro ao carregar dados de "${sheetName}": ${error.message}. Verifique a URL e a configuração do Apps Script.`, googleSheetsErrorMessageDiv);
-                return [];
-            } finally {
-                // Esconde o spinner e reabilita botões
-                importSheetsLoadingIndicator.classList.add('hidden');
-                saveSheetsUrlBtn.disabled = false;
-                calculateSellingPriceBtn.disabled = false;
-                addCashMovementBtn.disabled = false;
-                addOtherAssetBtn.disabled = false;
-                addLiabilityBtn.disabled = false;
-                recordSaleBtn.disabled = false;
-                addItemToSaleBtn.disabled = false;
-                exportAllDataBtn.disabled = false;
-                importAllDataBtn.disabled = false;
-            }
+        function saveCashFlowRecordsToLocalStorage() {
+            localStorage.setItem('cashFlowRecords', JSON.stringify(cashFlowRecords));
         }
 
-        /**
-         * Carrega todos os dados das planilhas do Google Sheets para as variáveis locais e atualiza a UI.
-         */
-        async function loadAllDataFromSheets() {
-            googleSheetsErrorMessageDiv.classList.add('hidden');
-            googleSheetsErrorMessageDiv.textContent = '';
-            
-            // O spinner e os botões são controlados pelas funções sendDataToGoogleSheets/fetchSheetData
-            // Não é necessário controlar aqui novamente.
-            
-            try {
-                products = await fetchSheetData('Products');
-                salesRecords = await fetchSheetData('Sales');
-                cashFlowRecords = await fetchSheetData('Cash Movements');
-                workingCapitalDetails.otherAssets = await fetchSheetData('Working Capital - Assets');
-                workingCapitalDetails.liabilities = await fetchSheetData('Working Capital - Liabilities');
-                
-                const markupDataArray = await fetchSheetData('Markup Data');
-                if (markupDataArray && markupDataArray.length > 0) {
-                    markupData.revenue = parseFloat(markupDataArray[0]['Revenue'] || 0);
-                    markupData.profitMargin = parseFloat(markupDataArray[0]['Profit Margin'] || 0);
-                } else {
-                    markupData = { revenue: 0, profitMargin: 0, variableExpensesDetails: [], fixedExpensesDetails: [] };
-                }
-
-                markupData.variableExpensesDetails = await fetchSheetData('Variable Expenses');
-                markupData.fixedExpensesDetails = await fetchSheetData('Fixed Expenses');
-
-                // Atualiza a UI com os dados carregados
-                renderProductList();
-                populateProductDatalist();
-                renderRecentSalesList();
+        function loadCashFlowRecordsFromLocalStorage() {
+            const storedData = localStorage.getItem('cashFlowRecords');
+            if (storedData) {
+                cashFlowRecords = JSON.parse(storedData);
                 renderCashMovements();
+                calculateCashBalance();
+            }
+        }
+
+        function saveWorkingCapitalDetailsToLocalStorage() {
+            localStorage.setItem('workingCapitalDetails', JSON.stringify(workingCapitalDetails));
+        }
+
+        function loadWorkingCapitalDetailsFromLocalStorage() {
+            const storedData = localStorage.getItem('workingCapitalDetails');
+            if (storedData) {
+                workingCapitalDetails = JSON.parse(storedData);
                 renderOtherCurrentAssets();
                 renderCurrentLiabilities();
-                calculateCashBalance();
                 calculateWorkingCapital();
-                loadMarkupDataToUI(); // Carrega os dados de markup para os campos do formulário
-                calculateMarkup(); // Recalcula o markup com base nos dados carregados
-                generateReport();
-
-                showInfoModal('Todos os dados foram carregados com sucesso do Google Sheets!');
-            } catch (error) {
-                console.error('Erro ao carregar todos os dados:', error);
-                displayError(`Erro ao carregar todos os dados: ${error.message}. Verifique a URL e a configuração do Apps Script.`, googleSheetsErrorMessageDiv);
             }
         }
 
-        // --- Funções Auxiliares para LocalStorage (agora não usadas para persistência principal) ---
-        // Estas funções foram mantidas, mas a persistência principal é via Google Sheets.
-        function saveProductsToLocalStorage() { /* No longer saves to LS, only for datalist update */ populateProductDatalist(); }
-        function saveSalesRecordsToLocalStorage() { /* No longer saves to LS */ }
-        function saveMarkupDataToLocalStorage() { /* No longer saves to LS */ }
-        function saveCashFlowRecordsToLocalStorage() { /* No longer saves to LS */ }
-        function saveWorkingCapitalDetailsToLocalStorage() { /* No longer saves to LS */ }
-
-        /**
-         * Carrega os dados de markup (receita, margem de lucro, despesas) para os campos da UI.
-         */
-        function loadMarkupDataToUI() {
-            totalMonthlyRevenueInput.value = markupData.revenue.toFixed(2);
-            profitMarginInput.value = markupData.profitMargin.toFixed(2);
-
-            variableExpensesList.innerHTML = '';
-            fixedExpensesList.innerHTML = '';
-
-            if (markupData.variableExpensesDetails && markupData.variableExpensesDetails.length > 0) {
-                markupData.variableExpensesDetails.forEach(exp => {
-                    addVariableExpenseRow(exp.Description, exp.Amount.toFixed(2)); // Use 'Description' and 'Amount' from Sheets
-                });
-            }
-            if (markupData.fixedExpensesDetails && markupData.fixedExpensesDetails.length > 0) {
-                markupData.fixedExpensesDetails.forEach(exp => {
-                    addFixedExpenseRow(exp.Description, exp.Amount.toFixed(2)); // Use 'Description' and 'Amount' from Sheets
-                });
-            }
-            updateTotalVariableExpenses();
-            updateTotalFixedExpenses();
-        }
-
-        let editingProductIndex = -1;
-
-        // --- Funções para Exportar Dados (CSV local) ---
-        // Estas funções agora exportam os dados atualmente carregados na memória, que vêm do Google Sheets.
+        // --- Funções para Exportar Dados ---
         function exportMarkupCalculationToCSV() {
+            const revenue = parseFloat(totalMonthlyRevenueInput.value) || 0;
+            const profitM = parseFloat(profitMarginInput.value) || 0;
             let csvContent = "";
 
             csvContent += "Despesas Variáveis;\n";
             csvContent += "Descrição;Valor (R$);\n";
-            markupData.variableExpensesDetails.forEach(exp => {
-                csvContent += `"${exp.Description.replace(/"/g, '""')}";${exp.Amount.toFixed(2).replace('.', ',')};\n`;
+            document.querySelectorAll('#variableExpensesList .variable-expense-row').forEach(row => {
+                const description = row.querySelector('.variable-expense-description').value.replace(/"/g, '""');
+                const amount = parseFloat(row.querySelector('.variable-expense-amount').value) || 0;
+                csvContent += `"${description}";${amount.toFixed(2).replace('.', ',')};\n`; // Use .replace('.', ',') for export
             });
             csvContent += "\n";
 
             csvContent += "Despesas Fixas;\n";
             csvContent += "Descrição;Valor (R$);\n";
-            markupData.fixedExpensesDetails.forEach(exp => {
-                csvContent += `"${exp.Description.replace(/"/g, '""')}";${exp.Amount.toFixed(2).replace('.', ',')};\n`;
+            document.querySelectorAll('#fixedExpensesList .fixed-expense-row').forEach(row => {
+                const description = row.querySelector('.fixed-expense-description').value.replace(/"/g, '""');
+                const amount = parseFloat(row.querySelector('.fixed-expense-amount').value) || 0;
+                csvContent += `"${description}";${amount.toFixed(2).replace('.', ',')};\n`; // Use .replace('.', ',') for export
             });
             csvContent += "\n";
 
             csvContent += "Receita Mensal Estimada (R$);\n";
-            csvContent += `${markupData.revenue.toFixed(2).replace('.', ',')};\n`;
+            csvContent += `${revenue.toFixed(2).replace('.', ',')};\n`; // Use .replace('.', ',') for export
             csvContent += "\n";
 
             csvContent += "Margem de Lucro Desejada (%);\n";
-            csvContent += `${markupData.profitMargin.toFixed(2).replace('.', ',')};\n`;
+            csvContent += `${profitM.toFixed(2).replace('.', ',')};\n`; // Use .replace('.', ',') for export
 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
@@ -1232,29 +1142,34 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                // alert('Detalhes do Markup exportados com sucesso para detalhes_markup.csv!'); // Using custom modal now
                 showInfoModal('Detalhes do Markup exportados com sucesso para detalhes_markup.csv!');
             } else {
+                // alert('O seu navegador não suporta a exportação direta de arquivos CSV. Por favor, copie o texto abaixo e cole numa planilha:\n\n' + csvContent); // Using custom modal now
                 showInfoModal('O seu navegador não suporta a exportação direta de arquivos CSV. Por favor, copie o texto abaixo e cole numa planilha:\n\n' + csvContent);
             }
         }
 
-        // --- Funções para Importar Dados (CSV local para a UI e depois para Google Sheets) ---
+        // --- Funções para Importar Dados ---
         function importMarkupFromCSV() {
             importMarkupFile.value = '';
             importMarkupFile.click();
         }
 
-        importMarkupFile.addEventListener('change', async (event) => {
+        importMarkupFile.addEventListener('change', (event) => {
             const file = event.target.files[0];
-            if (!file) { return; }
+            if (!file) {
+                return;
+            }
 
             const reader = new FileReader();
-            reader.onload = async (e) => {
+
+            reader.onload = (e) => {
                 const csvText = e.target.result;
                 const lines = csvText.split('\n').map(line => line.trim()).filter(line => line !== '');
 
                 if (lines.length < 1) {
+                    // alert('O ficheiro CSV está vazio ou não contém dados.'); // Using custom modal now
                     showInfoModal('O ficheiro CSV está vazio ou não contém dados.');
                     return;
                 }
@@ -1269,11 +1184,21 @@
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];
 
-                    if (line === "Despesas Variáveis;") { currentSection = 'variable'; continue; }
-                    else if (line === "Despesas Fixas;") { currentSection = 'fixed'; continue; }
-                    else if (line === "Receita Mensal Estimada (R$);") { currentSection = 'revenue'; continue; }
-                    else if (line === "Margem de Lucro Desejada (%);") { currentSection = 'profitMargin'; continue; }
-                    else if (line === "Descrição;Valor (R$);" || line === "Receita Mensal Estimada (R$);") { continue; }
+                    if (line === "Despesas Variáveis;") {
+                        currentSection = 'variable';
+                        continue;
+                    } else if (line === "Despesas Fixas;") {
+                        currentSection = 'fixed';
+                        continue;
+                    } else if (line === "Receita Mensal Estimada (R$);") {
+                        currentSection = 'revenue';
+                        continue;
+                    } else if (line === "Margem de Lucro Desejada (%);") {
+                        currentSection = 'profitMargin';
+                        continue;
+                    } else if (line === "Descrição;Valor (R$);" || line === "Receita Mensal Estimada (R$);") {
+                        continue;
+                    }
 
                     const columns = line.split(';');
 
@@ -1282,26 +1207,36 @@
                         const amount = parseFloat(columns[1].replace(',', '.'));
                         if (!description || isNaN(amount) || amount < 0) {
                             importErrors.push(`Linha ${i + 1} (Despesa Variável): Dados inválidos. Esperado "Descrição;Valor".`);
-                        } else { importedVariableExpenses.push({ 'Description': description, 'Amount': amount }); } // Use Sheets column names
+                        } else {
+                            importedVariableExpenses.push({ description, amount });
+                        }
                     } else if (currentSection === 'fixed' && columns.length >= 2) {
                         const description = columns[0].replace(/^"|"$/g, '');
                         const amount = parseFloat(columns[1].replace(',', '.'));
                         if (!description || isNaN(amount) || amount < 0) {
                             importErrors.push(`Linha ${i + 1} (Despesa Fixa): Dados inválidos. Esperado "Descrição;Valor".`);
-                        } else { importedFixedExpenses.push({ 'Description': description, 'Amount': amount }); } // Use Sheets column names
+                        } else {
+                            importedFixedExpenses.push({ description, amount });
+                        }
                     } else if (currentSection === 'revenue' && columns.length >= 1) {
                         const revenueValue = parseFloat(columns[0].replace(',', '.'));
                         if (isNaN(revenueValue) || revenueValue <= 0) {
                             importErrors.push(`Linha ${i + 1} (Receita): Valor inválido. Esperado um número maior que zero.`);
-                        } else { importedRevenue = revenueValue; }
+                        } else {
+                            importedRevenue = revenueValue;
+                        }
                     } else if (currentSection === 'profitMargin' && columns.length >= 1) {
                         const profitMarginValue = parseFloat(columns[0].replace(',', '.'));
                         if (isNaN(profitMarginValue) || profitMarginValue < 0 || profitMarginValue >= 100) {
                             importErrors.push(`Linha ${i + 1} (Margem de Lucro): Valor inválido (deve ser entre 0 e 99.99).`);
-                        } else { importedProfitMargin = profitMarginValue; }
+                        } else {
+                            importedProfitMargin = profitMarginValue;
+                        }
                     } else if (line !== "") {
-                        if (!line.startsWith("Despesas Variáveis;") && !line.startsWith("Despesas Fixas;") &&
-                            !line.startsWith("Receita Mensal Estimada (R$);") && !line.startsWith("Margem de Lucro Desejada (%);") &&
+                        if (!line.startsWith("Despesas Variáveis;") &&
+                            !line.startsWith("Despesas Fixas;") &&
+                            !line.startsWith("Receita Mensal Estimada (R$);") &&
+                            !line.startsWith("Margem de Lucro Desejada (%);") &&
                             !line.startsWith("Descrição;Valor (R$);")) {
                             importErrors.push(`Linha ${i + 1}: Formato inesperado ou dados inválidos. Linha: "${line}"`);
                         }
@@ -1310,33 +1245,35 @@
 
                 if (importErrors.length > 0) {
                     const errorSummary = importErrors.join('\n');
+                    // alert('Erros encontrados na importação do Markup:\n\n' + errorSummary); // Using custom modal now
                     showInfoModal('Erros encontrados na importação do Markup:\n\n' + errorSummary);
                     return;
                 }
 
-                // Update global markupData object
-                markupData.revenue = importedRevenue;
-                markupData.profitMargin = importedProfitMargin;
-                markupData.variableExpensesDetails = importedVariableExpenses;
-                markupData.fixedExpensesDetails = importedFixedExpenses;
+                totalMonthlyRevenueInput.value = importedRevenue.toFixed(2);
+                profitMarginInput.value = importedProfitMargin.toFixed(2);
+                
+                variableExpensesList.innerHTML = '';
+                fixedExpensesList.innerHTML = '';
 
-                // Send to Google Sheets
-                const markupResult = await sendDataToGoogleSheets('updateMarkup', 'Markup Data', {
-                    revenue: markupData.revenue,
-                    profitMargin: markupData.profitMargin
+                importedVariableExpenses.forEach(exp => {
+                    addVariableExpenseRow(exp.description, exp.amount.toFixed(2));
                 });
-                if (!markupResult.success) return;
 
-                // Clear existing variable expenses in sheet and add new ones
-                await sendDataToGoogleSheets('clearAndAdd', 'Variable Expenses', importedVariableExpenses);
-                // Clear existing fixed expenses in sheet and add new ones
-                await sendDataToGoogleSheets('clearAndAdd', 'Fixed Expenses', importedFixedExpenses);
+                importedFixedExpenses.forEach(exp => {
+                    addFixedExpenseRow(exp.description, exp.amount.toFixed(2));
+                });
 
-                // Reload data to ensure UI is consistent with Sheets
-                await loadAllDataFromSheets();
+                calculateMarkup();
+                // alert('Dados de Markup importados com sucesso e cálculo atualizado!'); // Using custom modal now
                 showInfoModal('Dados de Markup importados com sucesso e cálculo atualizado!');
             };
-            reader.onerror = () => { showInfoModal('Erro ao ler o ficheiro.'); };
+
+            reader.onerror = () => {
+                // alert('Erro ao ler o ficheiro.'); // Using custom modal now
+                showInfoModal('Erro ao ler o ficheiro.');
+            };
+
             reader.readAsText(file);
         });
 
@@ -1354,10 +1291,6 @@
             buttonElement.classList.toggle('collapsed');
         }
 
-        /**
-         * Mostra a seção da calculadora especificada e atualiza o título da página.
-         * @param {string} calculatorId - O ID da seção da calculadora a ser exibida (ex: 'markupCalculatorSection').
-         */
         function showCalculator(calculatorId) {
             calculatorSections.forEach(section => {
                 section.classList.remove('active');
@@ -1375,8 +1308,6 @@
             switch (calculatorId) {
                 case 'markupCalculatorSection':
                     pageTitle.textContent = 'Calculadora de Markup Multiplicador';
-                    loadMarkupDataToUI(); // Garante que os dados de markup são carregados na UI
-                    calculateMarkup();
                     break;
                 case 'sellingPriceCalculatorSection':
                     pageTitle.textContent = 'Gestão de Produtos e Vendas';
@@ -1415,39 +1346,26 @@
             } else if (calculatorId === 'reportSection') {
                 generateReport();
             }
-            window.scrollTo(0, 0); // Rola para o topo da página
+            window.scrollTo(0, 0); // Scroll to top
             toggleMenu();
         }
 
-        /**
-         * Exibe uma mensagem de erro em um elemento div específico.
-         * @param {string} message - A mensagem de erro a ser exibida.
-         * @param {HTMLElement} errorDiv - O elemento div onde a mensagem será exibida.
-         */
         function displayError(message, errorDiv) {
-            errorDiv.innerHTML = message; // Usa innerHTML para permitir tags <br>
+            errorDiv.textContent = message;
             errorDiv.classList.remove('hidden');
         }
 
-        /**
-         * Exibe um modal de informação personalizado (substitui alert()).
-         * @param {string} message - A mensagem a ser exibida no modal.
-         */
+        // Custom info modal instead of alert
         function showInfoModal(message) {
             confirmationMessage.textContent = message;
-            confirmYesBtn.classList.add('hidden'); // Esconde o botão "Sim"
-            confirmNoBtn.textContent = 'Ok'; // Muda "Não" para "Ok"
-            onConfirmCallback = hideConfirmationModal; // Define o callback para apenas esconder
+            confirmYesBtn.classList.add('hidden'); // Hide "Sim" button
+            confirmNoBtn.textContent = 'Ok'; // Change "Não" to "Ok"
+            onConfirmCallback = hideConfirmationModal; // Set callback to just hide
             confirmationModalOverlay.classList.add('open');
         }
 
         // --- Funções da Calculadora de Markup ---
-        /**
-         * Adiciona uma nova linha para despesa fixa na UI.
-         * @param {string} [description=''] - Descrição inicial da despesa.
-         * @param {string} [amount=''] - Valor inicial da despesa.
-         */
-        async function addFixedExpenseRow(description = '', amount = '') {
+        function addFixedExpenseRow(description = '', amount = '') {
             const expenseDiv = document.createElement('div');
             expenseDiv.className = 'mb-3 flex items-center space-x-2 fixed-expense-row';
             expenseDiv.innerHTML = `
@@ -1461,27 +1379,26 @@
             const amountInput = expenseDiv.querySelector('.fixed-expense-amount');
             const descriptionInput = expenseDiv.querySelector('.fixed-expense-description');
             
-            amountInput.addEventListener('input', async () => {
-                await updateMarkupDataInSheets();
+            amountInput.addEventListener('input', () => {
+                updateTotalFixedExpenses();
+                saveMarkupDataToLocalStorage();
                 calculateMarkup();
             });
-            descriptionInput.addEventListener('input', async () => {
-                await updateMarkupDataInSheets();
+            descriptionInput.addEventListener('input', () => {
+                saveMarkupDataToLocalStorage();
             });
 
             const removeButton = expenseDiv.querySelector('.remove-expense-btn');
-            removeButton.addEventListener('click', async () => {
+            removeButton.addEventListener('click', () => {
                 fixedExpensesList.removeChild(expenseDiv);
-                await updateMarkupDataInSheets();
+                updateTotalFixedExpenses();
+                saveMarkupDataToLocalStorage();
                 calculateMarkup();
             });
             updateTotalFixedExpenses();
         }
 
-        /**
-         * Atualiza o total das despesas fixas na UI.
-         */
-        async function updateTotalFixedExpenses() {
+        function updateTotalFixedExpenses() {
             let total = 0;
             document.querySelectorAll('.fixed-expense-amount').forEach(input => {
                 total += parseFloat(input.value) || 0;
@@ -1489,12 +1406,7 @@
             totalFixedExpensesAmountInput.value = total.toFixed(2);
         }
 
-        /**
-         * Adiciona uma nova linha para despesa variável na UI.
-         * @param {string} [description=''] - Descrição inicial da despesa.
-         * @param {string} [amount=''] - Valor inicial da despesa.
-         */
-        async function addVariableExpenseRow(description = '', amount = '') {
+        function addVariableExpenseRow(description = '', amount = '') {
             const expenseDiv = document.createElement('div');
             expenseDiv.className = 'mb-3 flex items-center space-x-2 variable-expense-row';
             expenseDiv.innerHTML = `
@@ -1508,56 +1420,26 @@
             const amountInput = expenseDiv.querySelector('.variable-expense-amount');
             const descriptionInput = expenseDiv.querySelector('.variable-expense-description');
 
-            amountInput.addEventListener('input', async () => {
-                await updateMarkupDataInSheets();
+            amountInput.addEventListener('input', () => {
+                updateTotalVariableExpenses();
+                saveMarkupDataToLocalStorage();
                 calculateMarkup();
             });
-            descriptionInput.addEventListener('input', async () => {
-                await updateMarkupDataInSheets();
+            descriptionInput.addEventListener('input', () => {
+                saveMarkupDataToLocalStorage();
             });
 
             const removeButton = expenseDiv.querySelector('.remove-expense-btn');
-            removeButton.addEventListener('click', async () => {
+            removeButton.addEventListener('click', () => {
                 variableExpensesList.removeChild(expenseDiv);
-                await updateMarkupDataInSheets();
+                updateTotalVariableExpenses();
+                saveMarkupDataToLocalStorage();
                 calculateMarkup();
             });
             updateTotalVariableExpenses();
         }
 
-        /**
-         * Atualiza os dados de markup (receita, margem, despesas) no Google Sheets.
-         */
-        async function updateMarkupDataInSheets() {
-            markupData.revenue = parseFloat(totalMonthlyRevenueInput.value) || 0;
-            markupData.profitMargin = parseFloat(profitMarginInput.value) || 0;
-
-            markupData.variableExpensesDetails = [];
-            document.querySelectorAll('#variableExpensesList .variable-expense-row').forEach(row => {
-                const description = row.querySelector('.variable-expense-description').value;
-                const amount = parseFloat(row.querySelector('.variable-expense-amount').value) || 0;
-                markupData.variableExpensesDetails.push({ 'Description': description, 'Amount': amount }); // Usa nomes de coluna do Sheets
-            });
-
-            markupData.fixedExpensesDetails = [];
-            document.querySelectorAll('#fixedExpensesList .fixed-expense-row').forEach(row => {
-                const description = row.querySelector('.fixed-expense-description').value;
-                const amount = parseFloat(row.querySelector('.fixed-expense-amount').value) || 0;
-                markupData.fixedExpensesDetails.push({ 'Description': description, 'Amount': amount }); // Usa nomes de coluna do Sheets
-            });
-
-            await sendDataToGoogleSheets('updateMarkup', 'Markup Data', {
-                revenue: markupData.revenue,
-                profitMargin: markupData.profitMargin
-            });
-            await sendDataToGoogleSheets('clearAndAdd', 'Variable Expenses', markupData.variableExpensesDetails);
-            await sendDataToGoogleSheets('clearAndAdd', 'Fixed Expenses', markupData.fixedExpensesDetails);
-        }
-
-        /**
-         * Atualiza o total das despesas variáveis na UI.
-         */
-        async function updateTotalVariableExpenses() {
+        function updateTotalVariableExpenses() {
             let total = 0;
             document.querySelectorAll('.variable-expense-amount').forEach(input => {
                 total += parseFloat(input.value) || 0;
@@ -1565,9 +1447,6 @@
             totalVariableExpensesAmountInput.value = total.toFixed(2);
         }
 
-        /**
-         * Calcula o Markup Multiplicador e atualiza a UI.
-         */
         function calculateMarkup() {
             markupErrorMessageDiv.classList.add('hidden');
             markupResultsDiv.classList.add('hidden');
@@ -1579,10 +1458,18 @@
             const fixExpAmount = parseFloat(totalFixedExpensesAmountInput.value);
             const profitM = parseFloat(profitMarginInput.value);
 
-            if (isNaN(revenue) || revenue <= 0) { return; }
-            if (isNaN(varExpAmount) || varExpAmount < 0) { return; }
-            if (isNaN(fixExpAmount) || fixExpAmount < 0) { return; }
-            if (isNaN(profitM) || profitM < 0 || profitM >= 100) { return; }
+            if (isNaN(revenue) || revenue <= 0) {
+                return;
+            }
+            if (isNaN(varExpAmount) || varExpAmount < 0) {
+                return;
+            }
+            if (isNaN(fixExpAmount) || fixExpAmount < 0) {
+                return;
+            }
+            if (isNaN(profitM) || profitM < 0 || profitM >= 100) {
+                return;
+            }
 
             const varExpPerc = (varExpAmount / revenue) * 100;
             const fixExpPerc = (fixExpAmount / revenue) * 100;
@@ -1607,7 +1494,17 @@
             markupResultsDiv.classList.remove('hidden');
 
             markupMultiplierInput.value = markup.toFixed(2);
-            
+
+            products.forEach(product => {
+                product.sellingPricePerUnit = product.initialUnitCost * markup;
+                // A linha abaixo não deve ser alterada aqui, pois o actualSoldPrice só é alterado na venda.
+                // if (product.actualSoldPrice === undefined || product.actualSoldPrice === 0) {
+                //     product.actualSoldPrice = product.sellingPricePerUnit;
+                // }
+            });
+            saveProductsToLocalStorage();
+            renderProductList();
+
             let logicHtml = `
                 <p class="mb-1">1. <strong>Despesas Variáveis em %:</strong> (Despesas Variáveis em R$ / Receita Mensal Total) * 100</p>
                 <p class="mb-1">   ($R\$ ${varExpAmount.toFixed(2)} / $R\$ ${revenue.toFixed(2)}) * 100 = <strong>${varExpPerc.toFixed(2)}%</strong></p>
@@ -1619,13 +1516,12 @@
                 <p class="mb-1">   100 / (100 - ${sumPerc.toFixed(2)}) = 100 / ${ (100 - sumPerc).toFixed(2) } = <strong>${markup.toFixed(2)}</strong></p>
             `;
             calculationLogicDiv.innerHTML = logicHtml;
+
+            saveMarkupDataToLocalStorage();
         }
 
         // --- Funções da Calculadora de Preço de Venda / Gestão de Produtos ---
-        /**
-         * Lida com o cálculo do preço de venda e adição/atualização de produtos.
-         */
-        async function handleSellingPriceCalculation() {
+        function handleSellingPriceCalculation() {
             sellingPriceErrorMessageDiv.classList.add('hidden');
             sellingPriceErrorMessageDiv.textContent = '';
 
@@ -1639,11 +1535,11 @@
                 displayError('Por favor, insira o Nome do Produto.', sellingPriceErrorMessageDiv);
                 return;
             }
-            if (editingProductIndex === -1 && products.some(product => product['Name'].toLowerCase() === pName.toLowerCase())) {
+            if (editingProductIndex === -1 && products.some(product => product.name.toLowerCase() === pName.toLowerCase())) {
                 displayError('Já existe um produto com este nome. Por favor, use um nome diferente.', sellingPriceErrorMessageDiv);
                 return;
             }
-            if (editingProductIndex !== -1 && products[editingProductIndex]['Name'].toLowerCase() !== pName.toLowerCase() && products.some((product, i) => i !== editingProductIndex && product['Name'].toLowerCase() === pName.toLowerCase())) {
+            if (editingProductIndex !== -1 && products[editingProductIndex].name.toLowerCase() !== pName.toLowerCase() && products.some((product, i) => i !== editingProductIndex && product.name.toLowerCase() === pName.toLowerCase())) {
                 displayError('Já existe outro produto com este nome. Por favor, use um nome diferente.', sellingPriceErrorMessageDiv);
                 return;
             }
@@ -1666,46 +1562,57 @@
             }
 
             const calculatedInitialUnitCost = pIndividualCost + pFreightCost;
+            const calculatedTotalProductCost = calculatedInitialUnitCost * pQuantity;
             const sellingPricePerUnit = calculatedInitialUnitCost * mMultiplier;
 
-            let productToSave = {
-                'Name': pName,
-                'Individual Cost (R$)': pIndividualCost,
-                'Freight Cost (R$)': pFreightCost,
-                'Quantity in Stock': pQuantity,
-                'Markup Suggested': mMultiplier,
-                'Suggested Selling Price (R$)': sellingPricePerUnit,
-                'Actual Selling Price (R$)': sellingPricePerUnit // Default to suggested for new products
-            };
+            let productToScrollName = pName;
 
-            let result;
             if (editingProductIndex !== -1) {
-                // Para atualização, precisamos do nome original do produto como identificador
-                const originalProductName = products[editingProductIndex]['Name'];
-                result = await sendDataToGoogleSheets('update', 'Products', productToSave, 'Name', originalProductName);
-            } else {
-                result = await sendDataToGoogleSheets('add', 'Products', productToSave);
-            }
-
-            if (result.success) {
-                await loadAllDataFromSheets(); // Recarrega todos os produtos da planilha
+                products[editingProductIndex] = {
+                    name: pName,
+                    individualCost: pIndividualCost,
+                    freightCost: pFreightCost,
+                    totalCost: calculatedTotalProductCost,
+                    initialUnitCost: calculatedInitialUnitCost,
+                    quantity: pQuantity,
+                    markup: mMultiplier,
+                    sellingPricePerUnit: sellingPricePerUnit,
+                    actualSoldPrice: products[editingProductIndex].actualSoldPrice !== undefined ? products[editingProductIndex].actualSoldPrice : sellingPricePerUnit
+                };
                 resetSellingPriceForm();
-                searchProductInput.value = '';
-
-                setTimeout(() => {
-                    const targetId = `product-item-${pName.replace(/\s+/g, '-')}`;
-                    const targetElement = document.getElementById(targetId);
-                    if (targetElement) {
-                        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                }, 100);
+            } else {
+                products.push({
+                    name: pName,
+                    individualCost: pIndividualCost,
+                    freightCost: pFreightCost,
+                    totalCost: calculatedTotalProductCost,
+                    initialUnitCost: calculatedInitialUnitCost,
+                    quantity: pQuantity,
+                    markup: mMultiplier,
+                    actualSoldPrice: sellingPricePerUnit, // Define o valor intencional
+                    sellingPricePerUnit: sellingPricePerUnit // Mantém o valor sugerido pelo markup
+                });
+                productNameInput.value = '';
+                individualProductCostInput.value = '';
+                freightCostPerUnitInput.value = '';
+                productQuantityInput.value = '1';
+                calculatedUnitCostDisplay.value = '';
+                calculatedTotalProductCostDisplay.value = '';
             }
+            
+            saveProductsToLocalStorage();
+            renderProductList();
+            searchProductInput.value = '';
+
+            setTimeout(() => {
+                const targetId = `product-item-${productToScrollName.replace(/\s+/g, '-')}`;
+                const targetElement = document.getElementById(targetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 100);
         }
 
-        /**
-         * Renderiza a lista de produtos na UI.
-         * @param {Array<object>} [productsToDisplay=products] - Array de produtos a serem exibidos.
-         */
         function renderProductList(productsToDisplay = products) {
             productListDiv.innerHTML = '';
             if (productsToDisplay.length === 0) {
@@ -1713,16 +1620,18 @@
             } else {
                 noProductsMessage.classList.add('hidden');
 
-                const sortedProducts = [...productsToDisplay].sort((a, b) => (a['Quantity in Stock'] === 0) - (b['Quantity in Stock'] === 0));
+                // Sort products: quantity > 0 first, then quantity === 0
+                const sortedProducts = [...productsToDisplay].sort((a, b) => (a.quantity === 0) - (b.quantity === 0));
 
                 sortedProducts.forEach((product, index) => {
-                    const unitCostDisplay = product['Individual Cost (R$)'] + product['Freight Cost (R$)'];
-                    const realMarkup = unitCostDisplay > 0 ? product['Actual Selling Price (R$)'] / unitCostDisplay : 0;
+                    const unitCostDisplay = product.initialUnitCost;
+                    
+                    const realMarkup = unitCostDisplay > 0 ? product.actualSoldPrice / unitCostDisplay : 0;
                     let percentageDifference = 0;
                     let gainLossClass = 'text-gray-700';
 
-                    if (product['Suggested Selling Price (R$)'] > 0) {
-                        percentageDifference = ((product['Actual Selling Price (R$)'] - product['Suggested Selling Price (R$)']) / product['Suggested Selling Price (R$)']) * 100;
+                    if (product.sellingPricePerUnit > 0) {
+                        percentageDifference = ((product.actualSoldPrice - product.sellingPricePerUnit) / product.sellingPricePerUnit) * 100;
                         if (percentageDifference > 0) {
                             gainLossClass = 'text-green-600';
                         } else if (percentageDifference < 0) {
@@ -1732,19 +1641,19 @@
 
                     const productItem = document.createElement('div');
                     productItem.className = 'flex flex-wrap sm:flex-nowrap justify-between items-start sm:items-center bg-white p-3 rounded-lg shadow-sm border border-gray-200';
-                    productItem.id = `product-item-${product['Name'].replace(/\s+/g, '-')}`;
+                    productItem.id = `product-item-${product.name.replace(/\s+/g, '-')}`;
                     productItem.innerHTML = `
                         <div class="flex flex-col mb-2 sm:mb-0 sm:w-1/3 md:w-1/4 lg:w-1/5">
-                            <span class="font-medium text-gray-800">${product['Name']}</span>
-                            <span class="text-sm text-gray-600">Custo Total Lote: R$ ${(unitCostDisplay * product['Quantity in Stock']).toFixed(2)} | Qtd: ${product['Quantity in Stock']}</span>
+                            <span class="font-medium text-gray-800">${product.name}</span>
+                            <span class="text-sm text-gray-600">Custo Total Lote: R$ ${product.totalCost.toFixed(2)} | Qtd: ${product.quantity}</span>
                             <span class="text-sm text-gray-600">Custo por Unidade Base: R$ ${unitCostDisplay.toFixed(2)}</span>
                         </div>
 
                         <div class="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center sm:flex-grow mb-2 sm:mb-0 sm:ml-4 sm:mr-4">
-                            <span class="text-blue-700 font-bold mr-2 whitespace-nowrap w-full sm:w-auto mb-1 sm:mb-0">Venda Sugerida: R$ ${product['Suggested Selling Price (R$)'].toFixed(2)}</span>
+                            <span class="text-blue-700 font-bold mr-2 whitespace-nowrap w-full sm:w-auto mb-1 sm:mb-0">Venda Sugerida: R$ ${product.sellingPricePerUnit.toFixed(2)}</span>
                             <div class="flex items-center space-x-2 w-full sm:w-auto mb-1 sm:mb-0">
-                                <label for="actualSoldPrice-${product['Name'].replace(/\s+/g, '-')}" class="text-sm text-gray-600 whitespace-nowrap">Definido pelo lojista (R$):</label>
-                                <input type="number" id="actualSoldPrice-${product['Name'].replace(/\s+/g, '-')}" class="actual-sold-price-input shadow-sm appearance-none border rounded-lg py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 text-right" value="${product['Actual Selling Price (R$)'].toFixed(2)}">
+                                <label for="actualSoldPrice-${product.name.replace(/\s+/g, '-')}" class="text-sm text-gray-600 whitespace-nowrap">Definido pelo lojista (R$):</label>
+                                <input type="number" id="actualSoldPrice-${product.name.replace(/\s+/g, '-')}" class="actual-sold-price-input shadow-sm appearance-none border rounded-lg py-1 px-2 text-gray-700 leading-tight focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 text-right" value="${product.actualSoldPrice !== undefined ? product.actualSoldPrice.toFixed(2) : product.sellingPricePerUnit.toFixed(2)}">
                             </div>
                             <div class="flex flex-col sm:flex-row sm:items-center w-full sm:w-auto">
                                 <span class="text-sm text-gray-600 whitespace-nowrap">Markup Real: <span class="font-semibold">${realMarkup.toFixed(2)}</span></span>
@@ -1753,13 +1662,13 @@
                         </div>
 
                         <div class="flex space-x-2 mt-2 sm:mt-0 sm:ml-4 sm:w-auto">
-                            <button type="button" class="view-image-btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-product-name="${product['Name']}">
+                            <button type="button" class="view-image-btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-product-name="${product.name}">
                                 Imagem
                             </button>
-                            <button type="button" class="edit-product-btn bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-product-name="${product['Name']}">
+                            <button type="button" class="edit-product-btn bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-product-name="${product.name}">
                                 Editar
                             </button>
-                            <button type="button" class="remove-product-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-product-name="${product['Name']}">
+                            <button type="button" class="remove-product-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-product-name="${product.name}">
                                 Remover
                             </button>
                         </div>
@@ -1768,18 +1677,19 @@
 
                     productItem.querySelector('.edit-product-btn').addEventListener('click', (event) => {
                         const productName = event.target.dataset.productName;
-                        const originalIndex = products.findIndex(p => p['Name'] === productName);
+                        const originalIndex = products.findIndex(p => p.name === productName);
                         if (originalIndex !== -1) {
                             editProduct(originalIndex);
                         }
                     });
                     productItem.querySelector('.remove-product-btn').addEventListener('click', (event) => {
                         const productName = event.target.dataset.productName;
-                        const originalIndex = products.findIndex(p => p['Name'] === productName);
+                        const originalIndex = products.findIndex(p => p.name === productName);
                         if (originalIndex !== -1) {
-                            showConfirmationModal(`Tem certeza que deseja remover o produto "${productName}"?`, async () => {
-                                await removeProductConfirmed(originalIndex);
-                                hideConfirmationModal();
+                            // Chama a função de confirmação antes de remover
+                            showConfirmationModal(`Tem certeza que deseja remover o produto "${productName}"?`, () => {
+                                removeProductConfirmed(originalIndex);
+                                hideConfirmationModal(); // Esconde o modal após a confirmação
                             });
                         }
                     });
@@ -1788,35 +1698,32 @@
                         showImageModal(productName);
                     });
 
-                    const actualSoldPriceInput = productItem.querySelector(`#actualSoldPrice-${product['Name'].replace(/\s+/g, '-')}`);
-                    actualSoldPriceInput.addEventListener('change', async (event) => {
+                    // Adicionado o event listener de 'change' para o input actualSoldPriceInput
+                    // para que ele salve o valor intencional definido pelo lojista.
+                    const actualSoldPriceInput = productItem.querySelector(`#actualSoldPrice-${product.name.replace(/\s+/g, '-')}`);
+                    actualSoldPriceInput.addEventListener('change', (event) => {
                         const newValue = parseFloat(event.target.value);
                         if (!isNaN(newValue) && newValue >= 0) {
-                            const updatedProduct = { ...product, 'Actual Selling Price (R$)': newValue };
-                            const result = await sendDataToGoogleSheets('update', 'Products', updatedProduct, 'Name', product['Name']);
-                            if (result.success) {
-                                await loadAllDataFromSheets(); // Re-render para atualizar a % de diferença
-                            }
+                            product.actualSoldPrice = newValue;
+                            saveProductsToLocalStorage();
+                            renderProductList(); // Re-renderiza para atualizar a % de diferença
                         } else {
-                            event.target.value = product['Actual Selling Price (R$)'].toFixed(2);
+                            // Se o valor for inválido, reverte para o valor salvo
+                            event.target.value = product.actualSoldPrice.toFixed(2);
                         }
                     });
                 });
             }
         }
 
-        /**
-         * Preenche os campos do formulário de produto com os dados do produto para edição.
-         * @param {number} index - O índice do produto a ser editado no array `products`.
-         */
         function editProduct(index) {
             const productToEdit = products[index];
             if (productToEdit) {
-                productNameInput.value = productToEdit['Name'];
-                individualProductCostInput.value = productToEdit['Individual Cost (R$)'] !== undefined ? productToEdit['Individual Cost (R$)'].toFixed(2) : '';
-                freightCostPerUnitInput.value = productToEdit['Freight Cost (R$)'] !== undefined ? productToEdit['Freight Cost (R$)'].toFixed(2) : '';
-                productQuantityInput.value = productToEdit['Quantity in Stock'];
-                markupMultiplierInput.value = productToEdit['Markup Suggested'].toFixed(2);
+                productNameInput.value = productToEdit.name;
+                individualProductCostInput.value = productToEdit.individualCost !== undefined ? productToEdit.individualCost.toFixed(2) : '';
+                freightCostPerUnitInput.value = productToEdit.freightCost !== undefined ? productToEdit.freightCost.toFixed(2) : '';
+                productQuantityInput.value = productToEdit.quantity;
+                markupMultiplierInput.value = productToEdit.markup.toFixed(2);
 
                 const currentIndividualCost = parseFloat(individualProductCostInput.value) || 0;
                 const currentFreightCost = parseFloat(freightCostPerUnitInput.value) || 0;
@@ -1835,24 +1742,16 @@
             }
         }
 
-        /**
-         * Remove um produto da lista e do Google Sheets após confirmação.
-         * @param {number} index - O índice do produto a ser removido.
-         */
-        async function removeProductConfirmed(index) {
-            const productName = products[index]['Name'];
-            const result = await sendDataToGoogleSheets('delete', 'Products', { 'Name': productName }, 'Name', productName);
-            if (result.success) {
-                await loadAllDataFromSheets();
-                resetSellingPriceForm();
-                searchProductInput.value = '';
-                showInfoModal('Produto removido com sucesso!');
-            }
+        function removeProductConfirmed(index) {
+            products.splice(index, 1);
+            saveProductsToLocalStorage();
+            renderProductList();
+            resetSellingPriceForm();
+            searchProductInput.value = '';
+            // alert('Produto removido com sucesso!'); // Using custom modal now
+            showInfoModal('Produto removido com sucesso!');
         }
 
-        /**
-         * Reseta os campos do formulário de cálculo de preço de venda.
-         */
         function resetSellingPriceForm() {
             productNameInput.value = '';
             individualProductCostInput.value = '';
@@ -1866,9 +1765,6 @@
         }
 
         // --- Nova Função de Pesquisa ---
-        /**
-         * Filtra e renderiza a lista de produtos com base no termo de pesquisa.
-         */
         function searchProducts() {
             const searchTerm = searchProductInput.value.toLowerCase().trim();
             if (searchTerm === '') {
@@ -1877,38 +1773,26 @@
             }
 
             const filteredProducts = products.filter(product => 
-                product['Name'].toLowerCase().includes(searchTerm)
+                product.name.toLowerCase().includes(searchTerm)
             );
             renderProductList(filteredProducts);
         }
 
         // --- Funções do Modal de Confirmação ---
-        /**
-         * Exibe o modal de confirmação com uma mensagem e um callback para o botão "Sim".
-         * @param {string} message - A mensagem a ser exibida.
-         * @param {Function} callback - A função a ser executada se o usuário clicar em "Sim".
-         */
         function showConfirmationModal(message, callback) {
             confirmationMessage.textContent = message;
-            confirmYesBtn.classList.remove('hidden'); // Mostra o botão "Sim"
-            confirmNoBtn.textContent = 'Não'; // Restaura o texto "Não"
+            confirmYesBtn.classList.remove('hidden'); // Show "Sim" button
+            confirmNoBtn.textContent = 'Não'; // Restore "Não" text
             onConfirmCallback = callback;
             confirmationModalOverlay.classList.add('open');
         }
 
-        /**
-         * Esconde o modal de confirmação.
-         */
         function hideConfirmationModal() {
             confirmationModalOverlay.classList.remove('open');
             onConfirmCallback = null;
         }
 
         // --- Funções do Modal de Imagem ---
-        /**
-         * Exibe o modal de imagem com a imagem do produto.
-         * @param {string} productName - O nome do produto para exibir a imagem.
-         */
         function showImageModal(productName) {
             imageModalTitle.textContent = `Imagem do Produto: ${productName}`;
             imageErrorText.classList.add('hidden');
@@ -1924,64 +1808,58 @@
             imageModalOverlay.classList.add('open');
         }
 
-        /**
-         * Esconde o modal de imagem.
-         */
         function hideImageModal() {
             imageModalOverlay.classList.remove('open');
             productImageDisplay.src = '';
         }
 
         // --- Funções de Limpeza de Dados ---
-        /**
-         * Limpa todos os dados da Calculadora de Markup no Google Sheets e na UI.
-         */
         function clearMarkupData() {
-            showConfirmationModal('Tem certeza que deseja limpar todos os dados da Calculadora de Markup?', async () => {
-                markupData = { revenue: 0, profitMargin: 0, variableExpensesDetails: [], fixedExpensesDetails: [] };
-                
-                const markupResult = await sendDataToGoogleSheets('updateMarkup', 'Markup Data', {
-                    revenue: markupData.revenue,
-                    profitMargin: markupData.profitMargin
-                });
-                if (!markupResult.success) return;
+            showConfirmationModal('Tem certeza que deseja limpar todos os dados da Calculadora de Markup?', () => {
+                totalMonthlyRevenueInput.value = '';
+                profitMarginInput.value = '';
+                variableExpensesList.innerHTML = '';
+                fixedExpensesList.innerHTML = '';
+                totalVariableExpensesAmountInput.value = '0.00';
+                totalFixedExpensesAmountInput.value = '0.00';
+                markupResultSpan.textContent = '';
+                variableExpensesPercentageSpan.textContent = '';
+                fixedExpensesPercentageSpan.textContent = '';
+                calculationLogicDiv.innerHTML = '';
+                markupResultsDiv.classList.add('hidden');
+                markupErrorMessageDiv.classList.add('hidden');
+                markupErrorMessageDiv.textContent = '';
 
-                await sendDataToGoogleSheets('clearAll', 'Variable Expenses', {});
-                await sendDataToGoogleSheets('clearAll', 'Fixed Expenses', {});
-
-                await loadAllDataFromSheets(); // Recarrega todos os dados para refletir as mudanças
+                localStorage.removeItem('markupData');
+                calculateMarkup();
+                markupMultiplierInput.value = '';
+                // alert('Dados da Calculadora de Markup limpos com sucesso!'); // Using custom modal now
                 showInfoModal('Dados da Calculadora de Markup limpos com sucesso!');
                 hideConfirmationModal();
             });
         }
 
         // --- Funções do Lançamento de Vendas (agora no modal) ---
-        /**
-         * Popula o datalist de produtos para o campo de nome do produto na venda.
-         */
         function populateProductDatalist() {
             productNamesDatalist.innerHTML = '';
             products.forEach(product => {
                 const option = document.createElement('option');
-                option.value = product['Name'];
+                option.value = product.name;
                 productNamesDatalist.appendChild(option);
             });
         }
 
         saleProductNameInput.addEventListener('input', () => {
             const enteredName = saleProductNameInput.value.trim().toLowerCase();
-            const foundProduct = products.find(p => p['Name'].toLowerCase() === enteredName);
+            const foundProduct = products.find(p => p.name.toLowerCase() === enteredName);
             if (foundProduct) {
-                saleActualSoldPriceInput.value = foundProduct['Actual Selling Price (R$)'].toFixed(2);
+                saleActualSoldPriceInput.value = foundProduct.actualSoldPrice.toFixed(2);
             } else {
                 saleActualSoldPriceInput.value = '';
             }
         });
 
-        /**
-         * Adiciona um item ao carrinho de vendas atual.
-         */
-        async function addItemToCurrentSale() {
+        function addItemToCurrentSale() {
             saleErrorMessageDiv.classList.add('hidden');
             saleErrorMessageDiv.textContent = '';
 
@@ -2002,7 +1880,7 @@
                 return;
             }
 
-            const productInStock = products.find(p => p['Name'].toLowerCase() === productName.toLowerCase());
+            const productInStock = products.find(p => p.name.toLowerCase() === productName.toLowerCase());
 
             if (!productInStock) {
                 displayError(`Produto "${productName}" não encontrado na lista de produtos.`, saleErrorMessageDiv);
@@ -2012,13 +1890,13 @@
             const existingCartItem = currentSaleItems.find(item => item.productName.toLowerCase() === productName.toLowerCase());
             let currentCartQuantity = existingCartItem ? existingCartItem.quantitySold : 0;
 
-            if (quantitySold + currentCartQuantity > productInStock['Quantity in Stock']) {
-                displayError(`Quantidade total para "${productName}" (${quantitySold + currentCartQuantity}) excede o stock disponível (${productInStock['Quantity in Stock']}).`, saleErrorMessageDiv);
+            if (quantitySold + currentCartQuantity > productInStock.quantity) {
+                displayError(`Quantidade total para "${productName}" (${quantitySold + currentCartQuantity}) excede o stock disponível (${productInStock.quantity}).`, saleErrorMessageDiv);
                 return;
             }
 
-            const unitCostAtSale = productInStock['Individual Cost (R$)'] + productInStock['Freight Cost (R$)'];
-            const suggestedSellingPricePerUnitAtSale = unitCostAtSale * productInStock['Markup Suggested'];
+            const unitCostAtSale = productInStock.initialUnitCost;
+            const suggestedSellingPricePerUnitAtSale = unitCostAtSale * productInStock.markup;
             const totalActualSoldPriceAtSale = actualSoldPricePerUnitInput * quantitySold;
             const totalSuggestedSellingPriceAtSale = suggestedSellingPricePerUnitAtSale * quantitySold;
 
@@ -2046,9 +1924,6 @@
             saleProductNameInput.focus();
         }
 
-        /**
-         * Renderiza os itens do carrinho de vendas atual na UI.
-         */
         function renderCurrentSaleItems() {
             currentSaleItemsList.innerHTML = '';
             let totalSaleValue = 0;
@@ -2082,19 +1957,12 @@
             currentSaleTotalSpan.textContent = `R$ ${totalSaleValue.toFixed(2)}`;
         }
 
-        /**
-         * Remove um item do carrinho de vendas atual.
-         * @param {number} index - O índice do item a ser removido.
-         */
         function removeItemFromCurrentSale(index) {
             currentSaleItems.splice(index, 1);
             renderCurrentSaleItems();
         }
 
-        /**
-         * Lida com o registro de uma venda completa no Google Sheets.
-         */
-        async function handleRecordSale() {
+        function handleRecordSale() {
             saleErrorMessageDiv.classList.add('hidden');
             saleErrorMessageDiv.textContent = '';
 
@@ -2110,89 +1978,59 @@
             }
 
             const transactionId = crypto.randomUUID();
-            let allSalesSuccessful = true;
 
-            for (const item of currentSaleItems) {
-                const productIndex = products.findIndex(p => p['Name'].toLowerCase() === item.productName.toLowerCase());
+            currentSaleItems.forEach(item => {
+                const productIndex = products.findIndex(p => p.name.toLowerCase() === item.productName.toLowerCase());
 
                 if (productIndex !== -1) {
                     const product = products[productIndex];
-                    const newQuantity = product['Quantity in Stock'] - item.quantitySold;
-                    
-                    const updatedProductData = {
-                        'Name': product['Name'],
-                        'Individual Cost (R$)': product['Individual Cost (R$)'],
-                        'Freight Cost (R$)': product['Freight Cost (R$)'],
-                        'Quantity in Stock': newQuantity,
-                        'Markup Suggested': product['Markup Suggested'],
-                        'Suggested Selling Price (R$)': product['Suggested Selling Price (R$)'],
-                        'Actual Selling Price (R$)': product['Actual Selling Price (R$)']
-                    };
+                    product.quantity -= item.quantitySold;
+                    product.totalCost = product.initialUnitCost * product.quantity;
+                    // Removido: product.actualSoldPrice = item.actualSoldPricePerUnitAtSale;
+                    // O valor de actualSoldPrice do produto base não será mais alterado pela venda.
 
-                    const productUpdateResult = await sendDataToGoogleSheets('update', 'Products', updatedProductData, 'Name', product['Name']);
-                    if (!productUpdateResult.success) {
-                        allSalesSuccessful = false;
-                        console.error(`Falha ao atualizar o stock para ${item.productName}`);
-                        displayError(`Falha ao atualizar o stock para ${item.productName}.`, saleErrorMessageDiv);
-                        break; // Para o processamento se a atualização do produto falhar
-                    }
+                    salesRecords.push({
+                        transactionId: transactionId,
+                        productName: item.productName,
+                        quantitySold: item.quantitySold,
+                        saleDate: saleDate,
+                        unitCostAtSale: item.unitCostAtSale,
+                        suggestedSellingPricePerUnitAtSale: item.suggestedSellingPricePerUnitAtSale,
+                        actualSoldPricePerUnitAtSale: item.actualSoldPricePerUnitAtSale,
+                        totalActualSoldPriceAtSale: item.totalActualSoldPriceAtSale,
+                        totalSuggestedSellingPriceAtSale: item.totalSuggestedSellingPriceAtSale
+                    });
 
-                    const saleRecordData = {
-                        'Transaction ID': transactionId,
-                        'Product Name': item.productName,
-                        'Quantity Sold': item.quantitySold,
-                        'Actual Sold Price Per Unit (R$)': item.actualSoldPricePerUnitAtSale,
-                        'Total Actual Sold Price (R$)': item.totalActualSoldPriceAtSale,
-                        'Unit Cost at Sale (R$)': item.unitCostAtSale,
-                        'Suggested Selling Price Per Unit at Sale (R$)': item.suggestedSellingPricePerUnitAtSale,
-                        'Total Suggested Selling Price at Sale (R$)': item.totalSuggestedSellingPriceAtSale,
-                        'Sale Date': saleDate
-                    };
-                    const saleRecordResult = await sendDataToGoogleSheets('add', 'Sales', saleRecordData);
-                    if (!saleRecordResult.success) {
-                        allSalesSuccessful = false;
-                        console.error(`Falha ao registrar a venda para ${item.productName}`);
-                        displayError(`Falha ao registrar a venda para ${item.productName}.`, saleErrorMessageDiv);
-                        break; // Para o processamento se o registro da venda falhar
-                    }
-
-                    const cashMovementData = {
-                        'ID': crypto.randomUUID(),
-                        'Date': saleDate,
-                        'Type': 'sale_inflow',
-                        'Description': `Venda de ${item.quantitySold}x ${item.productName}`,
-                        'Amount (R$)': item.totalActualSoldPriceAtSale,
-                        'Transaction ID': transactionId
-                    };
-                    const cashMovementResult = await sendDataToGoogleSheets('add', 'Cash Movements', cashMovementData);
-                    if (!cashMovementResult.success) {
-                        allSalesSuccessful = false;
-                        console.error(`Falha ao registrar movimentação de caixa para ${item.productName}`);
-                        displayError(`Falha ao registrar movimentação de caixa para ${item.productName}.`, saleErrorMessageDiv);
-                        break; // Para o processamento se a movimentação de caixa falhar
-                    }
+                    // Adiciona a venda como uma entrada de caixa
+                    cashFlowRecords.push({
+                        id: crypto.randomUUID(),
+                        date: saleDate,
+                        type: 'sale_inflow', // Tipo específico para vendas
+                        description: `Venda de ${item.quantitySold}x ${item.productName}`,
+                        amount: item.totalActualSoldPriceAtSale,
+                        transactionId: transactionId // Adiciona o ID da transação para facilitar a reversão
+                    });
                 } else {
-                    allSalesSuccessful = false;
                     console.error(`Erro: Produto "${item.productName}" não encontrado ao registrar a venda.`);
-                    displayError(`Erro: Produto "${item.productName}" não encontrado ao registrar a venda.`, saleErrorMessageDiv);
-                    break;
                 }
-            }
+            });
 
-            if (allSalesSuccessful) {
-                await loadAllDataFromSheets(); // Recarrega todos os dados após operações bem-sucedidas
-                currentSaleItems = [];
-                renderCurrentSaleItems();
-                hideSalesModal();
-                showInfoModal('Venda registrada com sucesso!');
-            } else {
-                showInfoModal('Ocorreu um erro ao registrar a venda. Algumas operações podem não ter sido concluídas.');
-            }
+            saveProductsToLocalStorage();
+            saveSalesRecordsToLocalStorage();
+            saveCashFlowRecordsToLocalStorage(); // Salva os registros de caixa
+            renderProductList();
+            renderRecentSalesList();
+            calculateCashBalance(); // Atualiza o saldo de caixa
+            generateReport();
+
+            currentSaleItems = [];
+            renderCurrentSaleItems();
+            hideSalesModal();
+
+            // alert('Venda registrada com sucesso!'); // Using custom modal now
+            showInfoModal('Venda registrada com sucesso!');
         }
 
-        /**
-         * Renderiza a lista de vendas recentes na UI.
-         */
         function renderRecentSalesList() {
             recentSalesListDiv.innerHTML = '';
             if (salesRecords.length === 0) {
@@ -2202,71 +2040,60 @@
                 salesRecords.slice().reverse().forEach((sale, index) => {
                     const saleItem = document.createElement('div');
                     saleItem.className = 'bg-white p-2 rounded-lg shadow-sm border border-gray-200 flex justify-between items-center';
+                    const originalIndex = salesRecords.length - 1 - index;
                     saleItem.innerHTML = `
                         <div>
-                            <span class="font-medium text-gray-800">${sale['Product Name']}</span>
-                            <span class="text-sm text-gray-600"> - ${sale['Quantity Sold']} unid. @ R$ ${sale['Actual Sold Price Per Unit (R$)'].toFixed(2)} /unid.</span>
-                            <span class="text-base font-semibold text-gray-700 block">Total: R$ ${sale['Total Actual Sold Price (R$)'].toFixed(2)}</span>
-                            <span class="text-sm text-gray-500 block">Data: ${sale['Sale Date']}</span>
-                            ${sale['Transaction ID'] ? `<span class="text-xs text-gray-400 block">Transação ID: ${sale['Transaction ID'].substring(0, 8)}...</span>` : ''}
+                            <span class="font-medium text-gray-800">${sale.productName}</span>
+                            <span class="text-sm text-gray-600"> - ${sale.quantitySold} unid. @ R$ ${sale.actualSoldPricePerUnitAtSale.toFixed(2)} /unid.</span>
+                            <span class="text-base font-semibold text-gray-700 block">Total: R$ ${sale.totalActualSoldPriceAtSale.toFixed(2)}</span>
+                            <span class="text-sm text-gray-500 block">Data: ${sale.saleDate}</span>
+                            ${sale.transactionId ? `<span class="text-xs text-gray-400 block">Transação ID: ${sale.transactionId.substring(0, 8)}...</span>` : ''}
                         </div>
-                        <button type="button" class="remove-sale-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-transaction-id="${sale['Transaction ID']}" data-product-name="${sale['Product Name']}" data-quantity-sold="${sale['Quantity Sold']}">
+                        <button type="button" class="remove-sale-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-sale-index="${originalIndex}">
                             Remover
                         </button>
                     `;
                     recentSalesListDiv.appendChild(saleItem);
 
-                    saleItem.querySelector('.remove-sale-btn').addEventListener('click', async (event) => {
-                        const transactionId = event.target.dataset.transactionId;
-                        const productName = event.target.dataset.productName;
-                        const quantitySold = parseInt(event.target.dataset.quantitySold);
-                        showConfirmationModal('Tem certeza que deseja remover esta venda? O stock do produto será ajustado e a movimentação de caixa será revertida.', async () => {
-                            await removeSaleConfirmed(transactionId, productName, quantitySold);
-                            hideConfirmationModal();
-                        });
+                    saleItem.querySelector('.remove-sale-btn').addEventListener('click', (event) => {
+                        const saleIndex = parseInt(event.target.dataset.saleIndex);
+                        removeSale(saleIndex);
                     });
                 });
             }
         }
 
-        /**
-         * Remove uma venda do Google Sheets e reverte as alterações de estoque e caixa.
-         * @param {string} transactionId - O ID da transação da venda a ser removida.
-         * @param {string} productName - O nome do produto envolvido na venda.
-         * @param {number} quantitySold - A quantidade vendida do produto.
-         */
-        async function removeSaleConfirmed(transactionId, productName, quantitySold) {
-            // Reverte o estoque do produto
-            const product = products.find(p => p['Name'].toLowerCase() === productName.toLowerCase());
-            if (product) {
-                const updatedProductData = {
-                    'Name': product['Name'],
-                    'Individual Cost (R$)': product['Individual Cost (R$)'],
-                    'Freight Cost (R$)': product['Freight Cost (R$)'],
-                    'Quantity in Stock': product['Quantity in Stock'] + quantitySold,
-                    'Markup Suggested': product['Markup Suggested'],
-                    'Suggested Selling Price (R$)': product['Suggested Selling Price (R$)'],
-                    'Actual Selling Price (R$)': product['Actual Selling Price (R$)']
-                };
-                await sendDataToGoogleSheets('update', 'Products', updatedProductData, 'Name', product['Name']);
-            }
+        function removeSale(index) {
+            showConfirmationModal('Tem certeza que deseja remover esta venda? O stock do produto será ajustado e a movimentação de caixa será revertida.', () => {
+                const removedSale = salesRecords.splice(index, 1)[0];
 
-            // Remove o registro de venda
-            await sendDataToGoogleSheets('delete', 'Sales', { 'Transaction ID': transactionId }, 'Transaction ID', transactionId);
+                const productIndex = products.findIndex(p => p.name.toLowerCase() === removedSale.productName.toLowerCase());
+                if (productIndex !== -1) {
+                    products[productIndex].quantity += removedSale.quantitySold;
+                    products[productIndex].totalCost = products[productIndex].initialUnitCost * products[productIndex].quantity;
+                }
 
-            // Remove as movimentações de caixa associadas (sale_inflow)
-            const cashMovementsToRemove = cashFlowRecords.filter(m => m.Type === 'sale_inflow' && m['Transaction ID'] === transactionId);
-            for (const movement of cashMovementsToRemove) {
-                await sendDataToGoogleSheets('delete', 'Cash Movements', { 'ID': movement.ID }, 'ID', movement.ID);
-            }
+                // Filtra as movimentações de caixa para remover aquelas associadas à venda removida
+                // Usamos o transactionId para garantir que estamos removendo as entradas de caixa corretas.
+                cashFlowRecords = cashFlowRecords.filter(movement =>
+                    !(movement.type === 'sale_inflow' &&
+                      movement.transactionId === removedSale.transactionId)
+                );
 
-            await loadAllDataFromSheets();
-            showInfoModal('Venda removida e estoque ajustado!');
+                saveProductsToLocalStorage();
+                saveSalesRecordsToLocalStorage();
+                saveCashFlowRecordsToLocalStorage(); // Salva os registros de caixa atualizados
+                renderProductList();
+                renderRecentSalesList();
+                calculateCashBalance(); // Recalcula o saldo de caixa
+                renderCashMovements(); // Atualiza a lista de movimentações de caixa
+                generateReport();
+                // alert('Venda removida e stock ajustado!'); // Using custom modal now
+                showInfoModal('Venda removida e stock ajustado!');
+                hideConfirmationModal();
+            });
         }
 
-        /**
-         * Mostra o modal de lançamento de vendas.
-         */
         function showSalesModal() {
             salesEntryModalOverlay.classList.add('open');
             saleDateInput.value = new Date().toISOString().split('T')[0];
@@ -2274,12 +2101,9 @@
             currentSaleItems = [];
             renderCurrentSaleItems();
             saleProductNameInput.focus();
-            window.scrollTo(0, 0); // Rola para o topo
+            window.scrollTo(0, 0); // Scroll to top
         }
 
-        /**
-         * Esconde o modal de lançamento de vendas.
-         */
         function hideSalesModal() {
             salesEntryModalOverlay.classList.remove('open');
             saleProductNameInput.value = '';
@@ -2291,27 +2115,20 @@
         }
 
         // --- Funções do Controle de Caixa ---
-        /**
-         * Calcula o saldo atual do caixa com base nos registros de movimentação.
-         * @returns {number} O saldo atual do caixa.
-         */
         function calculateCashBalance() {
             let balance = 0;
             cashFlowRecords.forEach(movement => {
-                if (movement.Type === 'inflow' || movement.Type === 'sale_inflow' || movement.Type === 'opening') {
-                    balance += movement['Amount (R$)'];
-                } else if (movement.Type === 'outflow' || movement.Type === 'closing') {
-                    balance -= movement['Amount (R$)'];
+                if (movement.type === 'inflow' || movement.type === 'sale_inflow' || movement.type === 'opening') {
+                    balance += movement.amount;
+                } else if (movement.type === 'outflow' || movement.type === 'closing') {
+                    balance -= movement.amount;
                 }
             });
             currentCashBalanceSpan.textContent = `R$ ${balance.toFixed(2)}`;
             return balance;
         }
 
-        /**
-         * Adiciona uma nova movimentação de caixa ao Google Sheets.
-         */
-        async function addCashMovement() {
+        function addCashMovement() {
             cashMovementErrorMessageDiv.classList.add('hidden');
             cashMovementErrorMessageDiv.textContent = '';
 
@@ -2337,86 +2154,80 @@
                 return;
             }
 
-            const newMovement = {
-                'ID': crypto.randomUUID(),
-                'Date': date,
-                'Type': type,
-                'Description': description,
-                'Amount (R$)': amount
-            };
+            cashFlowRecords.push({
+                id: crypto.randomUUID(),
+                date: date,
+                type: type,
+                description: description,
+                amount: amount
+            });
 
-            const result = await sendDataToGoogleSheets('add', 'Cash Movements', newMovement);
-            if (result.success) {
-                await loadAllDataFromSheets();
-                cashMovementDateInput.value = new Date().toISOString().split('T')[0];
-                cashMovementTypeSelect.value = '';
-                cashMovementDescriptionInput.value = '';
-                cashMovementAmountInput.value = '';
-                showInfoModal('Movimentação de caixa registrada com sucesso!');
-            }
+            saveCashFlowRecordsToLocalStorage();
+            renderCashMovements();
+            calculateCashBalance();
+
+            cashMovementDateInput.value = new Date().toISOString().split('T')[0];
+            cashMovementTypeSelect.value = '';
+            cashMovementDescriptionInput.value = '';
+            cashMovementAmountInput.value = '';
+            // alert('Movimentação de caixa registrada com sucesso!'); // Using custom modal now
+            showInfoModal('Movimentação de caixa registrada com sucesso!');
         }
 
-        /**
-         * Renderiza o histórico de movimentações de caixa na UI.
-         */
         function renderCashMovements() {
             cashMovementsListDiv.innerHTML = '';
             if (cashFlowRecords.length === 0) {
                 noCashMovementsMessage.classList.remove('hidden');
             } else {
                 noCashMovementsMessage.classList.add('hidden');
-                const sortedMovements = [...cashFlowRecords].sort((a, b) => new Date(b.Date) - new Date(a.Date));
+                // Sort by date descending
+                const sortedMovements = [...cashFlowRecords].sort((a, b) => new Date(b.date) - new Date(a.date));
 
                 sortedMovements.forEach((movement, index) => {
-                    const typeClass = (movement.Type === 'inflow' || movement.Type === 'sale_inflow' || movement.Type === 'opening') ? 'text-green-600' : 'text-red-600';
-                    const sign = (movement.Type === 'inflow' || movement.Type === 'sale_inflow' || movement.Type === 'opening') ? '+' : '-';
+                    const typeClass = (movement.type === 'inflow' || movement.type === 'sale_inflow' || movement.type === 'opening') ? 'text-green-600' : 'text-red-600';
+                    const sign = (movement.type === 'inflow' || movement.type === 'sale_inflow' || movement.type === 'opening') ? '+' : '-';
                     const movementItem = document.createElement('div');
                     movementItem.className = 'bg-white p-2 rounded-lg shadow-sm border border-gray-200 flex justify-between items-center';
                     movementItem.innerHTML = `
                         <div>
-                            <span class="font-medium text-gray-800">${movement.Description}</span>
-                            <span class="text-sm text-gray-600 block">Data: ${movement.Date} | Tipo: ${movement.Type.replace('_', ' ').replace('sale', 'Venda')}</span>
-                            <span class="text-base font-semibold ${typeClass} block">${sign} R$ ${movement['Amount (R$)'].toFixed(2)}</span>
-                            ${movement.ID ? `<span class="text-xs text-gray-400 block">ID: ${movement.ID.substring(0, 8)}...</span>` : ''}
+                            <span class="font-medium text-gray-800">${movement.description}</span>
+                            <span class="text-sm text-gray-600 block">Data: ${movement.date} | Tipo: ${movement.type.replace('_', ' ').replace('sale', 'Venda')}</span>
+                            <span class="text-base font-semibold ${typeClass} block">${sign} R$ ${movement.amount.toFixed(2)}</span>
+                            ${movement.id ? `<span class="text-xs text-gray-400 block">ID: ${movement.id.substring(0, 8)}...</span>` : ''}
                         </div>
-                        <button type="button" class="remove-cash-movement-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-id="${movement.ID}">
+                        <button type="button" class="remove-cash-movement-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 ease-in-out" data-id="${movement.id}">
                             Remover
                         </button>
                     `;
                     cashMovementsListDiv.appendChild(movementItem);
 
-                    movementItem.querySelector('.remove-cash-movement-btn').addEventListener('click', async (event) => {
+                    movementItem.querySelector('.remove-cash-movement-btn').addEventListener('click', (event) => {
                         const movementId = event.target.dataset.id;
-                        showConfirmationModal('Tem certeza que deseja remover esta movimentação de caixa? Isso afetará o saldo.', async () => {
-                            await removeCashMovementConfirmed(movementId);
-                            hideConfirmationModal();
-                        });
+                        removeCashMovement(movementId);
                     });
                 });
             }
         }
 
-        /**
-         * Remove uma movimentação de caixa do Google Sheets.
-         * @param {string} id - O ID da movimentação a ser removida.
-         */
-        async function removeCashMovementConfirmed(id) {
-            const result = await sendDataToGoogleSheets('delete', 'Cash Movements', { 'ID': id }, 'ID', id);
-            if (result.success) {
-                await loadAllDataFromSheets();
+        function removeCashMovement(id) {
+            showConfirmationModal('Tem certeza que deseja remover esta movimentação de caixa? Isso afetará o saldo.', () => {
+                cashFlowRecords = cashFlowRecords.filter(movement => movement.id !== id);
+                saveCashFlowRecordsToLocalStorage();
+                renderCashMovements();
+                calculateCashBalance();
+                generateReport();
+                // alert('Movimentação de caixa removida!'); // Using custom modal now
                 showInfoModal('Movimentação de caixa removida!');
-            }
+                hideConfirmationModal();
+            });
         }
 
         // --- Funções do Capital de Giro ---
-        /**
-         * Calcula o capital de giro atual e atualiza a UI.
-         */
         function calculateWorkingCapital() {
             const cashBalance = calculateCashBalance();
-            let totalInventoryValue = products.reduce((sum, product) => sum + ((product['Individual Cost (R$)'] + product['Freight Cost (R$)']) * product['Quantity in Stock']), 0);
-            let totalOtherAssets = workingCapitalDetails.otherAssets.reduce((sum, asset) => sum + asset['Value (R$)'], 0);
-            let totalLiabilities = workingCapitalDetails.liabilities.reduce((sum, liability) => sum + liability['Value (R$)'], 0);
+            let totalInventoryValue = products.reduce((sum, product) => sum + (product.initialUnitCost * product.quantity), 0);
+            let totalOtherAssets = workingCapitalDetails.otherAssets.reduce((sum, asset) => sum + asset.amount, 0);
+            let totalLiabilities = workingCapitalDetails.liabilities.reduce((sum, liability) => sum + liability.amount, 0);
 
             const totalCurrentAssets = cashBalance + totalInventoryValue + totalOtherAssets;
             const workingCapital = totalCurrentAssets - totalLiabilities;
@@ -2426,12 +2237,7 @@
             currentWorkingCapitalSpan.textContent = `R$ ${workingCapital.toFixed(2)}`;
         }
 
-        /**
-         * Adiciona uma nova linha para outro ativo circulante na UI.
-         * @param {string} [description=''] - Descrição inicial do ativo.
-         * @param {string} [amount=''] - Valor inicial do ativo.
-         */
-        async function addOtherAssetRow(description = '', amount = '') {
+        function addOtherAssetRow(description = '', amount = '') {
             const assetDiv = document.createElement('div');
             assetDiv.className = 'mb-3 flex items-center space-x-2 other-asset-row';
             assetDiv.innerHTML = `
@@ -2445,28 +2251,24 @@
             const amountInput = assetDiv.querySelector('.other-asset-amount');
             const descriptionInput = assetDiv.querySelector('.other-asset-description');
 
-            amountInput.addEventListener('input', async () => {
-                await updateWorkingCapitalDetailsInSheets();
+            amountInput.addEventListener('input', () => {
+                updateWorkingCapitalDetailsFromUI();
                 calculateWorkingCapital();
             });
-            descriptionInput.addEventListener('input', async () => {
-                await updateWorkingCapitalDetailsInSheets();
+            descriptionInput.addEventListener('input', () => {
+                updateWorkingCapitalDetailsFromUI();
             });
 
             const removeButton = assetDiv.querySelector('.remove-asset-btn');
-            removeButton.addEventListener('click', async () => {
+            removeButton.addEventListener('click', () => {
                 otherCurrentAssetsList.removeChild(assetDiv);
-                await updateWorkingCapitalDetailsInSheets();
+                updateWorkingCapitalDetailsFromUI();
                 calculateWorkingCapital();
             });
+            updateWorkingCapitalDetailsFromUI(); // Initial update
         }
 
-        /**
-         * Adiciona uma nova linha para passivo circulante na UI.
-         * @param {string} [description=''] - Descrição inicial do passivo.
-         * @param {string} [amount=''] - Valor inicial do passivo.
-         */
-        async function addLiabilityRow(description = '', amount = '') {
+        function addLiabilityRow(description = '', amount = '') {
             const liabilityDiv = document.createElement('div');
             liabilityDiv.className = 'mb-3 flex items-center space-x-2 current-liability-row';
             liabilityDiv.innerHTML = `
@@ -2480,74 +2282,59 @@
             const amountInput = liabilityDiv.querySelector('.current-liability-amount');
             const descriptionInput = liabilityDiv.querySelector('.current-liability-description');
 
-            amountInput.addEventListener('input', async () => {
-                await updateWorkingCapitalDetailsInSheets();
+            amountInput.addEventListener('input', () => {
+                updateWorkingCapitalDetailsFromUI();
                 calculateWorkingCapital();
             });
-            descriptionInput.addEventListener('input', async () => {
-                await updateWorkingCapitalDetailsInSheets();
+            descriptionInput.addEventListener('input', () => {
+                updateWorkingCapitalDetailsFromUI();
             });
 
             const removeButton = liabilityDiv.querySelector('.remove-liability-btn');
-            removeButton.addEventListener('click', async () => {
+            removeButton.addEventListener('click', () => {
                 currentLiabilitiesList.removeChild(liabilityDiv);
-                await updateWorkingCapitalDetailsInSheets();
+                updateWorkingCapitalDetailsFromUI();
                 calculateWorkingCapital();
             });
+            updateWorkingCapitalDetailsFromUI(); // Initial update
         }
 
-        /**
-         * Renderiza a lista de outros ativos circulantes na UI.
-         */
         function renderOtherCurrentAssets() {
             otherCurrentAssetsList.innerHTML = '';
             workingCapitalDetails.otherAssets.forEach(asset => {
-                addOtherAssetRow(asset.Description, asset['Value (R$)'].toFixed(2));
+                addOtherAssetRow(asset.description, asset.amount.toFixed(2));
             });
         }
 
-        /**
-         * Renderiza a lista de passivos circulantes na UI.
-         */
         function renderCurrentLiabilities() {
             currentLiabilitiesList.innerHTML = '';
             workingCapitalDetails.liabilities.forEach(liability => {
-                addLiabilityRow(liability.Description, liability['Value (R$)'].toFixed(2));
+                addLiabilityRow(liability.description, liability.amount.toFixed(2));
             });
         }
 
-        /**
-         * Atualiza os detalhes de capital de giro (ativos e passivos) no Google Sheets.
-         */
-        async function updateWorkingCapitalDetailsInSheets() {
+        function updateWorkingCapitalDetailsFromUI() {
             const otherAssets = [];
             document.querySelectorAll('#otherCurrentAssetsList .other-asset-row').forEach(row => {
                 const description = row.querySelector('.other-asset-description').value;
                 const amount = parseFloat(row.querySelector('.other-asset-amount').value) || 0;
-                otherAssets.push({ 'Description': description, 'Value (R$)': amount });
+                otherAssets.push({ description, amount });
             });
 
             const liabilities = [];
             document.querySelectorAll('#currentLiabilitiesList .current-liability-row').forEach(row => {
                 const description = row.querySelector('.current-liability-description').value;
                 const amount = parseFloat(row.querySelector('.current-liability-amount').value) || 0;
-                liabilities.push({ 'Description': description, 'Value (R$)': amount });
+                liabilities.push({ description, amount });
             });
 
-            // Atualiza o objeto local workingCapitalDetails
             workingCapitalDetails.otherAssets = otherAssets;
             workingCapitalDetails.liabilities = liabilities;
-
-            // Envia para o Google Sheets
-            await sendDataToGoogleSheets('clearAndAdd', 'Working Capital - Assets', otherAssets);
-            await sendDataToGoogleSheets('clearAndAdd', 'Working Capital - Liabilities', liabilities);
+            saveWorkingCapitalDetailsToLocalStorage();
         }
 
 
         // --- Funções do Relatório Geral ---
-        /**
-         * Gera e exibe o relatório geral na UI.
-         */
         function generateReport() {
             if (products.length === 0 && salesRecords.length === 0 && cashFlowRecords.length === 0) {
                 totalProductsCountSpan.textContent = '0';
@@ -2561,29 +2348,29 @@
                 productsNeutralSpan.textContent = '0';
                 overallGainLossPercentageSpan.textContent = '0.00%';
                 totalActualRevenueSpan.textContent = 'R$ 0.00';
-                // Reseta os campos de desempenho do estoque
+                // Reset stock performance fields
                 totalStockCostSpan.textContent = 'R$ 0.00';
                 totalStockSuggestedSellingPriceSpan.textContent = 'R$ 0.00';
                 totalStockActualSoldPriceSpan.textContent = 'R$ 0.00';
                 totalStockPotentialProfitSuggestedSpan.textContent = 'R$ 0.00';
                 totalStockPotentialProfitActualSpan.textContent = 'R$ 0.00';
-                // Reseta os campos de desempenho do markup
+                // Reset markup performance fields
                 markupReportRevenueSpan.textContent = 'R$ 0.00';
                 markupReportVariableExpensesSpan.textContent = 'R$ 0.00';
                 markupReportFixedExpensesSpan.textContent = 'R$ 0.00';
                 markupReportProfitMarginSpan.textContent = '0.00%';
                 markupReportMarkupMultiplierSpan.textContent = '0.00';
-                // Reseta os campos de ponto de equilíbrio
+                // Reset break-even fields
                 breakEvenRevenueSpan.textContent = 'R$ 0.00';
                 breakEvenProgressBar.style.width = '0%';
                 breakEvenProgressBar.style.backgroundColor = '#e0e0e0';
                 breakEvenProgressText.textContent = '0.00%';
                 currentSalesProgressSpan.textContent = 'R$ 0.00';
-                // Reseta os campos de resumo de caixa
+                // Reset cash summary fields
                 reportCashBalanceSpan.textContent = 'R$ 0.00';
                 reportTotalInflowsSpan.textContent = 'R$ 0.00';
                 reportTotalOutflowsSpan.textContent = 'R$ 0.00';
-                // Reseta os campos de resumo de capital de giro
+                // Reset working capital summary fields
                 reportWorkingCapitalSpan.textContent = 'R$ 0.00';
                 reportCurrentAssetsSpan.textContent = 'R$ 0.00';
                 reportCurrentLiabilitiesSpan.textContent = 'R$ 0.00';
@@ -2591,38 +2378,37 @@
             }
 
             let totalUnitsInStock = 0;
-            let totalUnitCostSum = 0; // Soma do custo unitário inicial
-            let totalSuggestedSellingPriceSum = 0; // Soma do preço de venda sugerido por unidade
-            let totalActualSoldPricePerUnitSum = 0; // Soma do preço de venda real por unidade
+            let totalUnitCostSum = 0; // Sum of initialUnitCost
+            let totalSuggestedSellingPriceSum = 0; // Sum of sellingPricePerUnit
+            let totalActualSoldPricePerUnitSum = 0; // Sum of actualSoldPrice
 
-            let totalStockCostValue = 0; // Valor total do estoque ao custo
-            let totalStockSuggestedSellingPriceValue = 0; // Valor total do estoque ao preço de venda sugerido
-            let totalStockActualSoldPriceValue = 0; // Valor total do estoque ao preço de venda real definido
+            let totalStockCostValue = 0; // Total value of stock at cost
+            let totalStockSuggestedSellingPriceValue = 0; // Total value of stock at suggested selling price
+            let totalStockActualSoldPriceValue = 0; // Total value of stock at actual set selling price
 
             products.forEach(product => {
-                const unitCost = product['Individual Cost (R$)'] + product['Freight Cost (R$)'];
-                totalUnitsInStock += product['Quantity in Stock'];
-                totalUnitCostSum += unitCost;
-                totalSuggestedSellingPriceSum += product['Suggested Selling Price (R$)'];
-                totalActualSoldPricePerUnitSum += product['Actual Selling Price (R$)'];
+                totalUnitsInStock += product.quantity;
+                totalUnitCostSum += product.initialUnitCost;
+                totalSuggestedSellingPriceSum += product.sellingPricePerUnit;
+                totalActualSoldPricePerUnitSum += product.actualSoldPrice;
                 
-                // Acumula valores de desempenho do estoque (multiplicado pela quantidade)
-                totalStockCostValue += unitCost * product['Quantity in Stock'];
-                totalStockSuggestedSellingPriceValue += product['Suggested Selling Price (R$)'] * product['Quantity in Stock'];
-                totalStockActualSoldPriceValue += product['Actual Selling Price (R$)'] * product['Quantity in Stock'];
+                // Accumulate stock performance values (multiplied by quantity)
+                totalStockCostValue += product.initialUnitCost * product.quantity;
+                totalStockSuggestedSellingPriceValue += product.sellingPricePerUnit * product.quantity;
+                totalStockActualSoldPriceValue += product.actualSoldPrice * product.quantity;
             });
 
-            // Calcula lucros potenciais para o estoque
+            // Calculate potential profits for stock
             const totalStockPotentialProfitSuggestedValue = totalStockSuggestedSellingPriceValue - totalStockCostValue;
             const totalStockPotentialProfitActualValue = totalStockActualSoldPriceValue - totalStockCostValue;
 
 
-            const numProducts = products.length; // Número de tipos de produtos únicos
+            const numProducts = products.length; // Number of unique product types
             const avgUnitCost = numProducts > 0 ? totalUnitCostSum / numProducts : 0;
             const avgSuggestedSellingPrice = numProducts > 0 ? totalSuggestedSellingPriceSum / numProducts : 0;
             const avgActualSoldPrice = numProducts > 0 ? totalActualSoldPricePerUnitSum / numProducts : 0;
             
-            // Recalcula markups médios com base nos preços médios
+            // Recalculate average markups based on the average prices
             const avgSuggestedMarkup = avgUnitCost > 0 ? avgSuggestedSellingPrice / avgUnitCost : 0;
             const avgRealMarkup = avgUnitCost > 0 ? avgActualSoldPrice / avgUnitCost : 0;
 
@@ -2634,10 +2420,10 @@
             let totalRevenueFromSuggestedSales = 0;
 
             salesRecords.forEach(sale => {
-                totalRevenueFromActualSales += sale['Total Actual Sold Price (R$)'];
-                totalRevenueFromSuggestedSales += sale['Total Suggested Selling Price (R$)'];
+                totalRevenueFromActualSales += sale.totalActualSoldPriceAtSale;
+                totalRevenueFromSuggestedSales += sale.totalSuggestedSellingPriceAtSale;
 
-                const gainLossPerUnit = (sale['Actual Sold Price Per Unit (R$)'] - sale['Suggested Selling Price Per Unit at Sale (R$)']);
+                const gainLossPerUnit = (sale.actualSoldPricePerUnitAtSale - sale.suggestedSellingPricePerUnitAtSale);
                 if (gainLossPerUnit > 0) {
                     salesWithGain++;
                 } else if (gainLossPerUnit < 0) {
@@ -2665,7 +2451,7 @@
             overallGainLossPercentageSpan.textContent = `${overallGainLossPercentage.toFixed(2)}%`;
             totalActualRevenueSpan.textContent = `R$ ${totalRevenueFromActualSales.toFixed(2)}`;
 
-            // Atualiza novos campos de desempenho do estoque
+            // Update new stock performance fields
             totalStockCostSpan.textContent = `R$ ${totalStockCostValue.toFixed(2)}`;
             totalStockSuggestedSellingPriceSpan.textContent = `R$ ${totalStockSuggestedSellingPriceValue.toFixed(2)}`;
             totalStockActualSoldPriceSpan.textContent = `R$ ${totalStockActualSoldPriceValue.toFixed(2)}`;
@@ -2673,86 +2459,107 @@
             totalStockPotentialProfitActualSpan.textContent = `R$ ${totalStockPotentialProfitActualValue.toFixed(2)}`;
 
             // --- Desempenho Geral do Markup ---
-            const markupRevenue = markupData.revenue || 0;
-            const markupVarExp = markupData.variableExpensesDetails.reduce((sum, exp) => sum + exp.Amount, 0); // Usa .Amount
-            const markupFixExp = markupData.fixedExpensesDetails.reduce((sum, exp) => sum + exp.Amount, 0); // Usa .Amount
-            const markupProfitMargin = markupData.profitMargin || 0;
+            const storedMarkupData = JSON.parse(localStorage.getItem('markupData'));
+            if (storedMarkupData) {
+                const markupRevenue = storedMarkupData.revenue || 0;
+                const markupVarExp = storedMarkupData.variableExpensesDetails.reduce((sum, exp) => sum + exp.amount, 0);
+                const markupFixExp = storedMarkupData.fixedExpensesDetails.reduce((sum, exp) => sum + exp.amount, 0);
+                const markupProfitMargin = storedMarkupData.profitMargin || 0;
 
-            markupReportRevenueSpan.textContent = `R$ ${markupRevenue.toFixed(2)}`;
-            markupReportVariableExpensesSpan.textContent = `R$ ${markupVarExp.toFixed(2)}`;
-            markupReportFixedExpensesSpan.textContent = `R$ ${markupFixExp.toFixed(2)}`;
-            markupReportProfitMarginSpan.textContent = `${markupProfitMargin.toFixed(2)}%`;
+                markupReportRevenueSpan.textContent = `R$ ${markupRevenue.toFixed(2)}`;
+                markupReportVariableExpensesSpan.textContent = `R$ ${markupVarExp.toFixed(2)}`;
+                markupReportFixedExpensesSpan.textContent = `R$ ${markupFixExp.toFixed(2)}`;
+                markupReportProfitMarginSpan.textContent = `${markupProfitMargin.toFixed(2)}%`;
 
-            let calculatedMarkupMultiplier = 0;
-            if (markupRevenue > 0) {
-                const varExpPerc = (markupVarExp / markupRevenue) * 100;
-                const fixExpPerc = (markupFixExp / markupRevenue) * 100;
-                const sumPerc = varExpPerc + fixExpPerc + markupProfitMargin;
-                if (sumPerc < 100) {
-                    calculatedMarkupMultiplier = 100 / (100 - sumPerc);
+                // Recalcular o markup multiplicador para exibição, caso não esteja salvo diretamente
+                let calculatedMarkupMultiplier = 0;
+                if (markupRevenue > 0) {
+                    const varExpPerc = (markupVarExp / markupRevenue) * 100;
+                    const fixExpPerc = (markupFixExp / markupRevenue) * 100;
+                    const sumPerc = varExpPerc + fixExpPerc + markupProfitMargin;
+                    if (sumPerc < 100) {
+                        calculatedMarkupMultiplier = 100 / (100 - sumPerc);
+                    }
                 }
-            }
-            markupReportMarkupMultiplierSpan.textContent = calculatedMarkupMultiplier.toFixed(2);
+                markupReportMarkupMultiplierSpan.textContent = calculatedMarkupMultiplier.toFixed(2);
 
-            // --- Ponto de Equilíbrio e Acompanhamento de Vendas ---
-            let breakEvenRevenueValue = 0;
-            if (markupRevenue > 0 && calculatedMarkupMultiplier > 0) {
-                const cogsPercentage = (100 / calculatedMarkupMultiplier);
-                const totalVariablePercentage = (markupVarExp / markupRevenue) * 100 + cogsPercentage;
+                // --- Ponto de Equilíbrio e Acompanhamento de Vendas ---
+                let breakEvenRevenueValue = 0;
+                if (markupRevenue > 0 && calculatedMarkupMultiplier > 0) {
+                    // Custo dos produtos como % da receita (implícito no markup)
+                    const cogsPercentage = (100 / calculatedMarkupMultiplier); // Ex: markup 2.0 -> 50% COGS
+                    const totalVariablePercentage = (markupVarExp / markupRevenue) * 100 + cogsPercentage;
 
-                if (totalVariablePercentage < 100) {
-                    breakEvenRevenueValue = markupFixExp / (1 - (totalVariablePercentage / 100));
+                    if (totalVariablePercentage < 100) {
+                        breakEvenRevenueValue = markupFixExp / (1 - (totalVariablePercentage / 100));
+                    } else {
+                        // Se a porcentagem variável total for >= 100%, o ponto de equilíbrio é inatingível
+                        breakEvenRevenueValue = Infinity;
+                    }
+                }
+                
+                breakEvenRevenueSpan.textContent = `R$ ${breakEvenRevenueValue !== Infinity ? breakEvenRevenueValue.toFixed(2) : 'Inatingível'}`;
+
+                // Acompanhamento em tempo real
+                currentSalesProgressSpan.textContent = `R$ ${totalRevenueFromActualSales.toFixed(2)}`;
+
+                let progressPercentage = 0;
+                if (breakEvenRevenueValue > 0 && breakEvenRevenueValue !== Infinity) {
+                    progressPercentage = (totalRevenueFromActualSales / breakEvenRevenueValue) * 100;
+                    if (progressPercentage > 100) progressPercentage = 100; // Limita a 100%
+                }
+
+                breakEvenProgressBar.style.width = `${progressPercentage.toFixed(2)}%`;
+                breakEvenProgressText.textContent = `${progressPercentage.toFixed(2)}%`;
+
+                if (progressPercentage >= 100) {
+                    breakEvenProgressBar.style.backgroundColor = '#4CAF50'; // Verde
+                    breakEvenProgressText.style.color = 'white';
+                } else if (progressPercentage > 50) {
+                    breakEvenProgressBar.style.backgroundColor = '#FFC107'; // Amarelo
+                    breakEvenProgressText.style.color = 'black';
                 } else {
-                    breakEvenRevenueValue = Infinity;
+                    breakEvenProgressBar.style.backgroundColor = '#F44336'; // Vermelho
+                    breakEvenProgressText.style.color = 'white';
                 }
-            }
-            
-            breakEvenRevenueSpan.textContent = `R$ ${breakEvenRevenueValue !== Infinity ? breakEvenRevenueValue.toFixed(2) : 'Inatingível'}`;
+                // Se a barra estiver muito estreita, o texto pode ficar fora
+                if (progressPercentage < 20 && progressPercentage > 0) { // Ajuste conforme necessário
+                    breakEvenProgressText.style.color = '#333'; // Texto fora da barra
+                    breakEvenProgressText.style.left = '50%';
+                    breakEvenProgressText.style.transform = 'translateX(-50%)';
+                } else {
+                    breakEvenProgressText.style.position = 'static';
+                    breakEvenProgressText.style.transform = 'none';
+                }
 
-            currentSalesProgressSpan.textContent = `R$ ${totalRevenueFromActualSales.toFixed(2)}`;
 
-            let progressPercentage = 0;
-            if (breakEvenRevenueValue > 0 && breakEvenRevenueValue !== Infinity) {
-                progressPercentage = (totalRevenueFromActualSales / breakEvenRevenueValue) * 100;
-                if (progressPercentage > 100) progressPercentage = 100;
-            }
-
-            breakEvenProgressBar.style.width = `${progressPercentage.toFixed(2)}%`;
-            breakEvenProgressText.textContent = `${progressPercentage.toFixed(2)}%`;
-
-            if (progressPercentage >= 100) {
-                breakEvenProgressBar.style.backgroundColor = '#4CAF50';
-                breakEvenProgressText.style.color = 'white';
-            } else if (progressPercentage > 50) {
-                breakEvenProgressBar.style.backgroundColor = '#FFC107';
-                breakEvenProgressText.style.color = 'black';
             } else {
-                breakEvenProgressBar.style.backgroundColor = '#F44336';
-                breakEvenProgressText.style.color = 'white';
-            }
-            if (progressPercentage < 20 && progressPercentage > 0) {
-                breakEvenProgressText.style.color = '#333';
-                breakEvenProgressText.style.left = '50%';
-                breakEvenProgressText.style.transform = 'translateX(-50%)';
-            } else {
-                breakEvenProgressText.style.position = 'static';
-                breakEvenProgressText.style.transform = 'none';
+                markupReportRevenueSpan.textContent = 'R$ 0.00';
+                markupReportVariableExpensesSpan.textContent = 'R$ 0.00';
+                markupReportFixedExpensesSpan.textContent = 'R$ 0.00';
+                markupReportProfitMarginSpan.textContent = '0.00%';
+                markupReportMarkupMultiplierSpan.textContent = '0.00';
+                breakEvenRevenueSpan.textContent = 'R$ 0.00';
+                breakEvenProgressBar.style.width = '0%';
+                breakEvenProgressBar.style.backgroundColor = '#e0e0e0';
+                breakEvenProgressText.textContent = '0.00%';
+                currentSalesProgressSpan.textContent = 'R$ 0.00';
             }
 
             // --- Resumo de Caixa no Relatório ---
             const currentBalance = calculateCashBalance();
             reportCashBalanceSpan.textContent = `R$ ${currentBalance.toFixed(2)}`;
 
-            let totalInflows = cashFlowRecords.filter(m => m.Type === 'inflow' || m.Type === 'sale_inflow' || m.Type === 'opening').reduce((sum, m) => sum + m['Amount (R$)'], 0);
-            let totalOutflows = cashFlowRecords.filter(m => m.Type === 'outflow' || m.Type === 'closing').reduce((sum, m) => sum + m['Amount (R$)'], 0);
+            let totalInflows = cashFlowRecords.filter(m => m.type === 'inflow' || m.type === 'sale_inflow' || m.type === 'opening').reduce((sum, m) => sum + m.amount, 0);
+            let totalOutflows = cashFlowRecords.filter(m => m.type === 'outflow' || m.type === 'closing').reduce((sum, m) => sum + m.amount, 0);
             
             reportTotalInflowsSpan.textContent = `R$ ${totalInflows.toFixed(2)}`;
             reportTotalOutflowsSpan.textContent = `R$ ${totalOutflows.toFixed(2)}`;
 
             // --- Resumo de Capital de Giro no Relatório ---
-            const totalInventoryValueReport = products.reduce((sum, product) => sum + ((product['Individual Cost (R$)'] + product['Freight Cost (R$)']) * product['Quantity in Stock']), 0);
-            const totalOtherAssetsReport = workingCapitalDetails.otherAssets.reduce((sum, asset) => sum + asset['Value (R$)'], 0);
-            const totalLiabilitiesReport = workingCapitalDetails.liabilities.reduce((sum, liability) => sum + liability['Value (R$)'], 0);
+            const totalInventoryValueReport = products.reduce((sum, product) => sum + (product.initialUnitCost * product.quantity), 0);
+            const totalOtherAssetsReport = workingCapitalDetails.otherAssets.reduce((sum, asset) => sum + asset.amount, 0);
+            const totalLiabilitiesReport = workingCapitalDetails.liabilities.reduce((sum, liability) => sum + liability.amount, 0);
 
             const totalCurrentAssetsReport = currentBalance + totalInventoryValueReport + totalOtherAssetsReport;
             const workingCapitalReport = totalCurrentAssetsReport - totalLiabilitiesReport;
@@ -2762,57 +2569,59 @@
             reportCurrentLiabilitiesSpan.textContent = `R$ ${totalLiabilitiesReport.toFixed(2)}`;
         }
 
-        // --- Funções de Exportar/Importar Todos os Dados (CSV local) ---
-        // Estas funções agora exportam os dados atualmente carregados na memória, que vêm do Google Sheets.
+        // --- Funções de Exportar/Importar Todos os Dados ---
         function exportAllDataToCSV() {
             let csvContent = "";
 
             csvContent += "[PRODUTOS]\n";
-            csvContent += '"Name";"Individual Cost (R$)";"Freight Cost (R$)";"Quantity in Stock";"Markup Suggested";"Suggested Selling Price (R$)";"Actual Selling Price (R$)"\n';
+            csvContent += '"Nome do Produto";"Custo Individual (R$)";"Custo Frete (R$)";"Quantidade em Estoque";"Markup Sugerido";"Preço Venda Sugerido (R$)";"Preço Venda Real (R$)"\n';
             products.forEach(product => {
-                csvContent += `"${product.Name.replace(/"/g, '""')}";${product['Individual Cost (R$)'].toFixed(2).replace('.', ',')};${product['Freight Cost (R$)'].toFixed(2).replace('.', ',')};${product['Quantity in Stock']};${product['Markup Suggested'].toFixed(2).replace('.', ',')};${product['Suggested Selling Price (R$)'].toFixed(2).replace('.', ',')};${product['Actual Selling Price (R$)'].toFixed(2).replace('.', ',')}\n`;
+                csvContent += `"${product.name.replace(/"/g, '""')}";${product.individualCost.toFixed(2).replace('.', ',')};${product.freightCost.toFixed(2).replace('.', ',')};${product.quantity};${product.markup.toFixed(2).replace('.', ',')};${product.sellingPricePerUnit.toFixed(2).replace('.', ',')};${product.actualSoldPrice.toFixed(2).replace('.', ',')}\n`;
             });
             csvContent += "\n";
 
             csvContent += "[VENDAS]\n";
-            csvContent += '"Transaction ID";"Product Name";"Quantity Sold";"Actual Sold Price Per Unit (R$)";"Total Actual Sold Price (R$)";"Unit Cost at Sale (R$)";"Suggested Selling Price Per Unit at Sale (R$)";"Total Suggested Selling Price at Sale (R$)";"Sale Date"\n';
+            csvContent += '"Nome Produto";"Quantidade Vendida";"Preço Venda Real por Unidade (R$)";"Preço Total Venda Real (R$)";"Custo Unidade na Venda (R$)";"Preço Sugerido por Unidade na Venda (R$)";"Preço Total Sugerido na Venda (R$)";"Data Venda";"ID da Transação"\n';
             salesRecords.forEach(sale => {
-                csvContent += `"${sale['Transaction ID'] || ''}";"${sale['Product Name'].replace(/"/g, '""')}";${sale['Quantity Sold']};${sale['Actual Sold Price Per Unit (R$)'].toFixed(2).replace('.', ',')};${sale['Total Actual Sold Price (R$)'].toFixed(2).replace('.', ',')};${sale['Unit Cost at Sale (R$)'].toFixed(2).replace('.', ',')};${sale['Suggested Selling Price Per Unit at Sale (R$)'].toFixed(2).replace('.', ',')};${sale['Total Suggested Selling Price at Sale (R$)'].toFixed(2).replace('.', ',')};${sale['Sale Date']}\n`;
+                csvContent += `"${sale.productName.replace(/"/g, '""')}";${sale.quantitySold};${sale.actualSoldPricePerUnitAtSale.toFixed(2).replace('.', ',')};${sale.totalActualSoldPriceAtSale.toFixed(2).replace('.', ',')};${sale.unitCostAtSale.toFixed(2).replace('.', ',')};${sale.suggestedSellingPricePerUnitAtSale.toFixed(2).replace('.', ',')};${sale.totalSuggestedSellingPriceAtSale.toFixed(2).replace('.', ',')};${sale.saleDate};${sale.transactionId || ''}\n`;
             });
             csvContent += "\n";
 
             csvContent += "[MOVIMENTACOES_CAIXA]\n";
-            csvContent += '"ID";"Date";"Type";"Description";"Amount (R$)"\n';
+            csvContent += '"ID";"Data";"Tipo";"Descrição";"Valor (R$)"\n';
             cashFlowRecords.forEach(movement => {
-                csvContent += `"${movement.ID}";"${movement.Date}";"${movement.Type}";"${movement.Description.replace(/"/g, '""')}";${movement['Amount (R$)'].toFixed(2).replace('.', ',')}\n`;
+                csvContent += `"${movement.id}";"${movement.date}";"${movement.type}";"${movement.description.replace(/"/g, '""')}";${movement.amount.toFixed(2).replace('.', ',')}\n`;
             });
             csvContent += "\n";
 
             csvContent += "[CAPITAL_DE_GIRO_ATIVOS]\n";
-            csvContent += '"Description";"Value (R$)"\n';
+            csvContent += '"Descrição";"Valor (R$)"\n';
             workingCapitalDetails.otherAssets.forEach(asset => {
-                csvContent += `"${asset.Description.replace(/"/g, '""')}";${asset['Value (R$)'].toFixed(2).replace('.', ',')}\n`;
+                csvContent += `"${asset.description.replace(/"/g, '""')}";${asset.amount.toFixed(2).replace('.', ',')}\n`;
             });
             csvContent += "\n";
 
             csvContent += "[CAPITAL_DE_GIRO_PASSIVOS]\n";
-            csvContent += '"Description";"Value (R$)"\n';
+            csvContent += '"Descrição";"Valor (R$)"\n';
             workingCapitalDetails.liabilities.forEach(liability => {
-                csvContent += `"${liability.Description.replace(/"/g, '""')}";${liability['Value (R$)'].toFixed(2).replace('.', ',')}\n`;
+                csvContent += `"${liability.description.replace(/"/g, '""')}";${liability.amount.toFixed(2).replace('.', ',')}\n`;
             });
             csvContent += "\n";
 
             csvContent += "[MARKUP_DATA]\n";
-            csvContent += `"Revenue";${markupData.revenue.toFixed(2).replace('.', ',')}\n`;
-            csvContent += `"Profit Margin";${markupData.profitMargin.toFixed(2).replace('.', ',')}\n`;
-            csvContent += "Variable Expenses;\n";
-            markupData.variableExpensesDetails.forEach(exp => {
-                csvContent += `"${exp.Description.replace(/"/g, '""')}";${exp.Amount.toFixed(2).replace('.', ',')}\n`; // Usa .Description e .Amount
-            });
-            csvContent += "Fixed Expenses;\n";
-            markupData.fixedExpensesDetails.forEach(exp => {
-                csvContent += `"${exp.Description.replace(/"/g, '""')}";${exp.Amount.toFixed(2).replace('.', ',')}\n`; // Usa .Description e .Amount
-            });
+            const markupData = JSON.parse(localStorage.getItem('markupData'));
+            if (markupData) {
+                csvContent += `"Receita Mensal Estimada (R$)";${markupData.revenue.toFixed(2).replace('.', ',')}\n`;
+                csvContent += `"Margem de Lucro Desejada (%)";${markupData.profitMargin.toFixed(2).replace('.', ',')}\n`;
+                csvContent += "Despesas Variaveis Detalhadas;\n";
+                markupData.variableExpensesDetails.forEach(exp => {
+                    csvContent += `"${exp.description.replace(/"/g, '""')}";${exp.amount.toFixed(2).replace('.', ',')}\n`;
+                });
+                csvContent += "Despesas Fixas Detalhadas;\n";
+                markupData.fixedExpensesDetails.forEach(exp => {
+                    csvContent += `"${exp.description.replace(/"/g, '""')}";${exp.amount.toFixed(2).replace('.', ',')}\n`;
+                });
+            }
             csvContent += "\n";
 
 
@@ -2827,197 +2636,348 @@
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
+                // alert('Dados exportados com sucesso para dados_pdv_unificados.csv!'); // Using custom modal now
                 showInfoModal('Dados exportados com sucesso para dados_pdv_unificados.csv!');
             } else {
+                // alert('O seu navegador não suporta a exportação direta de arquivos CSV. Por favor, copie o texto abaixo e cole numa planilha:\n\n' + csvContent); // Using custom modal now
                 showInfoModal('O seu navegador não suporta a exportação direta de arquivos CSV. Por favor, copie o texto abaixo e cole numa planilha:\n\n' + csvContent);
             }
         }
 
-        /**
-         * Inicia o processo de importação de todos os dados de um arquivo CSV local para o Google Sheets.
-         */
-        async function importAllDataFromCSV() {
-            showConfirmationModal('Importar dados substituirá todos os produtos, registos de vendas, movimentações de caixa e dados de capital de giro existentes no Google Sheets. Tem certeza que deseja continuar?', async () => {
+        // Função auxiliar para processar o texto CSV e atualizar os dados
+        function processImportedCSVText(csvText) {
+            // Normalize line endings to handle different OS formats, then split and trim
+            const lines = csvText.replace(/\r\n/g, '\n').split('\n').map(line => line.trim()).filter(line => line !== '');
+
+            if (lines.length === 0) {
+                showInfoModal('O ficheiro CSV está vazio ou não contém dados válidos.');
+                return;
+            }
+
+            let currentSection = null;
+            const importedProducts = [];
+            const importedSales = [];
+            const importedCashMovements = [];
+            const importedOtherAssets = [];
+            const importedLiabilities = [];
+            let importedMarkupRevenue = 0;
+            let importedMarkupProfitMargin = 0;
+            const importedMarkupVariableExpensesDetails = [];
+            const importedMarkupFixedExpensesDetails = [];
+            const importErrors = [];
+
+            // Helper function to parse a string value, removing quotes and replacing comma with dot for numbers
+            const parseString = (value) => value ? value.replace(/^"|"$/g, '').trim() : '';
+            const parseFloatLocalized = (value) => parseFloat(value ? value.replace(/^"|"$/g, '').replace(',', '.') : '0'); // Default to '0' if value is empty/null
+            const parseIntLocalized = (value) => parseInt(value ? value.replace(/^"|"$/g, '').replace(',', '.') : '0'); // Default to '0' if value is empty/null
+
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+
+                if (line === '[PRODUTOS]') {
+                    currentSection = 'PRODUCTS';
+                    i++; // Skip header line
+                    continue;
+                } else if (line === '[VENDAS]') {
+                    currentSection = 'SALES';
+                    i++; // Skip header line
+                    continue;
+                } else if (line === '[MOVIMENTACOES_CAIXA]') {
+                    currentSection = 'CASH_MOVEMENTS';
+                    i++; // Skip header line
+                    continue;
+                } else if (line === '[CAPITAL_DE_GIRO_ATIVOS]') {
+                    currentSection = 'WORKING_CAPITAL_ASSETS';
+                    i++; // Skip header line
+                    continue;
+                } else if (line === '[CAPITAL_DE_GIRO_PASSIVOS]') {
+                    currentSection = 'WORKING_CAPITAL_LIABILITIES';
+                    i++; // Skip header line
+                    continue;
+                } else if (line === '[MARKUP_DATA]') {
+                    currentSection = 'MARKUP_DATA';
+                    // No i++ here, as the next line is data, not a sub-header to skip
+                    continue;
+                } else if (line.startsWith('"Receita Mensal Estimada (R$)";') && currentSection === 'MARKUP_DATA') {
+                    const columns = line.split(';');
+                    if (columns.length >= 2) {
+                        importedMarkupRevenue = parseFloatLocalized(columns[1]);
+                    }
+                    continue;
+                } else if (line.startsWith('"Margem de Lucro Desejada (%)";') && currentSection === 'MARKUP_DATA') {
+                    const columns = line.split(';');
+                    if (columns.length >= 2) {
+                        importedMarkupProfitMargin = parseFloatLocalized(columns[1]);
+                    }
+                    continue;
+                } else if (line === "Despesas Variaveis Detalhadas;" && currentSection === 'MARKUP_DATA') {
+                    // Next lines are variable expenses until next section or empty line
+                    let j = i + 1;
+                    while (lines[j] && !lines[j].startsWith("[") && lines[j].trim() !== "" && lines[j].trim() !== "Despesas Fixas Detalhadas;") {
+                        const expCols = lines[j].split(';');
+                        if (expCols.length >= 2) {
+                            const description = parseString(expCols[0]);
+                            const amount = parseFloatLocalized(expCols[1]);
+                            if (description && !isNaN(amount)) {
+                                importedMarkupVariableExpensesDetails.push({ description, amount });
+                            } else {
+                                importErrors.push(`Erro na linha ${j + 1} (Despesas Variáveis Detalhadas): Dados inválidos. Linha: "${lines[j]}"`);
+                            }
+                        }
+                        j++;
+                    }
+                    i = j - 1; // Adjust loop counter to the last processed line
+                    continue;
+                } else if (line === "Despesas Fixas Detalhadas;" && currentSection === 'MARKUP_DATA') {
+                    // Next lines are fixed expenses until next section or empty line
+                    let j = i + 1;
+                    while (lines[j] && !lines[j].startsWith("[") && lines[j].trim() !== "") {
+                        const expCols = lines[j].split(';');
+                        if (expCols.length >= 2) {
+                            const description = parseString(expCols[0]);
+                            const amount = parseFloatLocalized(expCols[1]);
+                            if (description && !isNaN(amount)) {
+                                importedMarkupFixedExpensesDetails.push({ description, amount });
+                            } else {
+                                importErrors.push(`Erro na linha ${j + 1} (Despesas Fixas Detalhadas): Dados inválidos. Linha: "${lines[j]}"`);
+                            }
+                        }
+                        j++;
+                    }
+                    i = j - 1; // Adjust loop counter to the last processed line
+                    continue;
+                }
+
+
+                const columns = line.split(';');
+
+                if (currentSection === 'PRODUCTS') {
+                    if (columns.length === 7) {
+                        try {
+                            const name = parseString(columns[0]);
+                            const individualCost = parseFloatLocalized(columns[1]);
+                            const freightCost = parseFloatLocalized(columns[2]);
+                            const quantity = parseIntLocalized(columns[3]);
+                            const markup = parseFloatLocalized(columns[4]);
+                            const sellingPricePerUnit = parseFloatLocalized(columns[5]);
+                            const actualSoldPrice = parseFloatLocalized(columns[6]);
+
+                            if (isNaN(individualCost) || isNaN(freightCost) || isNaN(quantity) || isNaN(markup) || isNaN(sellingPricePerUnit) || isNaN(actualSoldPrice) || !name) {
+                                throw new Error('Dados numéricos ou nome inválidos.');
+                            }
+
+                            const initialUnitCost = individualCost + freightCost;
+                            const totalCost = initialUnitCost * quantity;
+
+                            importedProducts.push({
+                                name: name,
+                                individualCost: individualCost,
+                                freightCost: freightCost,
+                                quantity: quantity,
+                                markup: markup,
+                                sellingPricePerUnit: sellingPricePerUnit,
+                                actualSoldPrice: actualSoldPrice,
+                                initialUnitCost: initialUnitCost,
+                                totalCost: totalCost
+                            });
+                        } catch (e) {
+                            importErrors.push(`Erro na linha ${i + 1} (Produtos): ${e.message}. Linha: "${line}"`);
+                        }
+                    } else if (line !== "") {
+                        importErrors.push(`Formato inválido na linha ${i + 1} (Produtos). Esperado 7 colunas. Linha: "${line}"`);
+                    }
+                } else if (currentSection === 'SALES') {
+                    if (columns.length >= 8) { // Minimum 8 columns, 9 with transactionId
+                        try {
+                            const productName = parseString(columns[0]);
+                            const quantitySold = parseIntLocalized(columns[1]);
+                            const actualSoldPricePerUnit = parseFloatLocalized(columns[2]);
+                            const totalActualSoldPrice = parseFloatLocalized(columns[3]);
+                            const unitCostAtSale = parseFloatLocalized(columns[4]);
+                            const suggestedSellingPricePerUnit = parseFloatLocalized(columns[5]);
+                            const totalSuggestedSellingPrice = parseFloatLocalized(columns[6]);
+                            const saleDate = parseString(columns[7]);
+                            const transactionId = parseString(columns[8]) || '';
+
+                            if (isNaN(quantitySold) || isNaN(actualSoldPricePerUnit) || isNaN(totalActualSoldPrice) || isNaN(unitCostAtSale) || isNaN(suggestedSellingPricePerUnit) || isNaN(totalSuggestedSellingPrice) || !productName || !saleDate) {
+                                throw new Error('Dados numéricos ou de texto inválidos.');
+                            }
+
+                            importedSales.push({
+                                productName: productName,
+                                quantitySold: quantitySold,
+                                actualSoldPricePerUnitAtSale: actualSoldPricePerUnit,
+                                totalActualSoldPriceAtSale: totalActualSoldPrice,
+                                unitCostAtSale: unitCostAtSale,
+                                suggestedSellingPricePerUnitAtSale: suggestedSellingPricePerUnit,
+                                totalSuggestedSellingPriceAtSale: totalSuggestedSellingPrice,
+                                saleDate: saleDate,
+                                transactionId: transactionId
+                            });
+                        } catch (e) {
+                            importErrors.push(`Erro na linha ${i + 1} (Vendas): ${e.message}. Linha: "${line}"`);
+                        }
+                    } else if (line !== "") {
+                        importErrors.push(`Formato inválido na linha ${i + 1} (Vendas). Esperado pelo menos 8 colunas. Linha: "${line}"`);
+                    }
+                } else if (currentSection === 'CASH_MOVEMENTS') {
+                    if (columns.length === 5) {
+                        try {
+                            const id = parseString(columns[0]);
+                            const date = parseString(columns[1]);
+                            const type = parseString(columns[2]);
+                            const description = parseString(columns[3]);
+                            const amount = parseFloatLocalized(columns[4]);
+
+                            if (isNaN(amount) || !id || !date || !type || !description) {
+                                throw new Error('Dados numéricos ou de texto inválidos.');
+                            }
+
+                            importedCashMovements.push({
+                                id: id,
+                                date: date,
+                                type: type,
+                                description: description,
+                                amount: amount
+                            });
+                        } catch (e) {
+                            importErrors.push(`Erro na linha ${i + 1} (Movimentações de Caixa): ${e.message}. Linha: "${line}"`);
+                        }
+                    } else if (line !== "") {
+                        importErrors.push(`Formato inválido na linha ${i + 1} (Movimentações de Caixa). Esperado 5 colunas. Linha: "${line}"`);
+                    }
+                } else if (currentSection === 'WORKING_CAPITAL_ASSETS') {
+                    if (columns.length === 2) {
+                        try {
+                            const description = parseString(columns[0]);
+                            const amount = parseFloatLocalized(columns[1]);
+
+                            if (isNaN(amount) || !description) {
+                                throw new Error('Dados numéricos ou de texto inválidos.');
+                            }
+
+                            importedOtherAssets.push({
+                                description: description,
+                                amount: amount
+                            });
+                        } catch (e) {
+                            importErrors.push(`Erro na linha ${i + 1} (Ativos de Capital de Giro): ${e.message}. Linha: "${line}"`);
+                        }
+                    } else if (line !== "") {
+                        importErrors.push(`Formato inválido na linha ${i + 1} (Ativos de Capital de Giro). Esperado 2 colunas. Linha: "${line}"`);
+                    }
+                } else if (currentSection === 'WORKING_CAPITAL_LIABILITIES') {
+                    if (columns.length === 2) {
+                        try {
+                            const description = parseString(columns[0]);
+                            const amount = parseFloatLocalized(columns[1]);
+
+                            if (isNaN(amount) || !description) {
+                                throw new Error('Dados numéricos ou de texto inválidos.');
+                            }
+
+                            importedLiabilities.push({
+                                description: description,
+                                amount: amount
+                            });
+                        } catch (e) {
+                            importErrors.push(`Erro na linha ${i + 1} (Passivos de Capital de Giro): ${e.message}. Linha: "${line}"`);
+                        }
+                    } else if (line !== "") {
+                        importErrors.push(`Formato inválido na linha ${i + 1} (Passivos de Capital de Giro). Esperado 2 colunas. Linha: "${line}"`);
+                    }
+                }
+            }
+
+            if (importErrors.length > 0) {
+                const errorSummary = importErrors.join('\n');
+                showInfoModal('Erros encontrados durante a importação:\n\n' + errorSummary);
+                return;
+            }
+
+            products = importedProducts;
+            salesRecords = importedSales;
+            cashFlowRecords = importedCashMovements;
+            workingCapitalDetails.otherAssets = importedOtherAssets;
+            workingCapitalDetails.liabilities = importedLiabilities;
+
+            // Set markup data
+            const newMarkupData = {
+                revenue: importedMarkupRevenue,
+                profitMargin: importedMarkupProfitMargin,
+                variableExpensesDetails: importedMarkupVariableExpensesDetails,
+                fixedExpensesDetails: importedMarkupFixedExpensesDetails
+            };
+            localStorage.setItem('markupData', JSON.stringify(newMarkupData));
+
+
+            saveProductsToLocalStorage();
+            saveSalesRecordsToLocalStorage();
+            saveCashFlowRecordsToLocalStorage();
+            saveWorkingCapitalDetailsToLocalStorage();
+            
+            loadMarkupDataFromLocalStorage(); // Reload markup UI
+            renderProductList();
+            renderRecentSalesList();
+            renderCashMovements();
+            calculateCashBalance();
+            renderOtherCurrentAssets();
+            renderCurrentLiabilities();
+            calculateWorkingCapital();
+            generateReport();
+            showInfoModal('Dados importados e atualizados com sucesso!');
+        }
+
+        function importAllDataFromCSV() {
+            showConfirmationModal('Importar dados substituirá todos os produtos, registos de vendas, movimentações de caixa e dados de capital de giro existentes. Tem certeza que deseja continuar?', () => {
                 importAllDataFile.value = '';
                 importAllDataFile.click();
                 hideConfirmationModal();
             });
         }
 
-        importAllDataFile.addEventListener('change', async (event) => {
+        importAllDataFile.addEventListener('change', (event) => {
             const file = event.target.files[0];
-            if (!file) { return; }
+            if (!file) {
+                return;
+            }
 
             const reader = new FileReader();
-            reader.onload = async (e) => {
+
+            reader.onload = (e) => {
                 const csvText = e.target.result;
-                const lines = csvText.replace(/\r\n/g, '\n').split('\n').map(line => line.trim()).filter(line => line !== '');
-
-                if (lines.length === 0) {
-                    showInfoModal('O ficheiro CSV está vazio ou não contém dados válidos.');
-                    return;
-                }
-
-                let currentSection = null;
-                const importedProducts = [];
-                const importedSales = [];
-                const importedCashMovements = [];
-                const importedOtherAssets = [];
-                const importedLiabilities = [];
-                let importedMarkupRevenue = 0;
-                let importedMarkupProfitMargin = 0;
-                const importedMarkupVariableExpensesDetails = [];
-                const importedMarkupFixedExpensesDetails = [];
-                const importErrors = [];
-
-                const parseString = (value) => value ? value.replace(/^"|"$/g, '').trim() : '';
-                const parseFloatLocalized = (value) => parseFloat(value ? value.replace(/^"|"$/g, '').replace(',', '.') : '0');
-                const parseIntLocalized = (value) => parseInt(value ? value.replace(/^"|"$/g, '').replace(',', '.') : '0');
-
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i];
-
-                    if (line === '[PRODUTOS]') { currentSection = 'PRODUCTS'; i++; continue; }
-                    else if (line === '[VENDAS]') { currentSection = 'SALES'; i++; continue; }
-                    else if (line === '[MOVIMENTACOES_CAIXA]') { currentSection = 'CASH_MOVEMENTS'; i++; continue; }
-                    else if (line === '[CAPITAL_DE_GIRO_ATIVOS]') { currentSection = 'WORKING_CAPITAL_ASSETS'; i++; continue; }
-                    else if (line === '[CAPITAL_DE_GIRO_PASSIVOS]') { currentSection = 'WORKING_CAPITAL_LIABILITIES'; i++; continue; }
-                    else if (line === '[MARKUP_DATA]') { currentSection = 'MARKUP_DATA'; continue; }
-                    else if (line.startsWith('"Revenue";') && currentSection === 'MARKUP_DATA') {
-                        const columns = line.split(';');
-                        if (columns.length >= 2) importedMarkupRevenue = parseFloatLocalized(columns[1]);
-                        continue;
-                    } else if (line.startsWith('"Profit Margin";') && currentSection === 'MARKUP_DATA') {
-                        const columns = line.split(';');
-                        if (columns.length >= 2) importedMarkupProfitMargin = parseFloatLocalized(columns[1]);
-                        continue;
-                    } else if (line === "Variable Expenses;" && currentSection === 'MARKUP_DATA') {
-                        let j = i + 1;
-                        while (lines[j] && !lines[j].startsWith("[") && lines[j].trim() !== "" && lines[j].trim() !== "Fixed Expenses;") {
-                            const expCols = lines[j].split(';');
-                            if (expCols.length >= 2) {
-                                const description = parseString(expCols[0]);
-                                const amount = parseFloatLocalized(expCols[1]);
-                                if (description && !isNaN(amount)) importedMarkupVariableExpensesDetails.push({ 'Description': description, 'Amount': amount });
-                                else importErrors.push(`Erro na linha ${j + 1} (Despesas Variáveis Detalhadas): Dados inválidos. Linha: "${lines[j]}"`);
-                            }
-                            j++;
-                        }
-                        i = j - 1; continue;
-                    } else if (line === "Fixed Expenses;" && currentSection === 'MARKUP_DATA') {
-                        let j = i + 1;
-                        while (lines[j] && !lines[j].startsWith("[") && lines[j].trim() !== "") {
-                            const expCols = lines[j].split(';');
-                            if (expCols.length >= 2) {
-                                const description = parseString(expCols[0]);
-                                const amount = parseFloatLocalized(expCols[1]);
-                                if (description && !isNaN(amount)) importedMarkupFixedExpensesDetails.push({ 'Description': description, 'Amount': amount });
-                                else importErrors.push(`Erro na linha ${j + 1} (Despesas Fixas Detalhadas): Dados inválidos. Linha: "${lines[j]}"`);
-                            }
-                            j++;
-                        }
-                        i = j - 1; continue;
-                    }
-
-                    const columns = line.split(';');
-
-                    if (currentSection === 'PRODUCTS') {
-                        if (columns.length === 7) {
-                            try {
-                                importedProducts.push({
-                                    'Name': parseString(columns[0]),
-                                    'Individual Cost (R$)': parseFloatLocalized(columns[1]),
-                                    'Freight Cost (R$)': parseFloatLocalized(columns[2]),
-                                    'Quantity in Stock': parseIntLocalized(columns[3]),
-                                    'Markup Suggested': parseFloatLocalized(columns[4]),
-                                    'Suggested Selling Price (R$)': parseFloatLocalized(columns[5]),
-                                    'Actual Selling Price (R$)': parseFloatLocalized(columns[6])
-                                });
-                            } catch (e) { importErrors.push(`Erro na linha ${i + 1} (Produtos): ${e.message}. Linha: "${line}"`); }
-                        } else if (line !== "") { importErrors.push(`Formato inválido na linha ${i + 1} (Produtos). Esperado 7 colunas. Linha: "${line}"`); }
-                    } else if (currentSection === 'SALES') {
-                        if (columns.length >= 9) {
-                            try {
-                                importedSales.push({
-                                    'Transaction ID': parseString(columns[0]),
-                                    'Product Name': parseString(columns[1]),
-                                    'Quantity Sold': parseIntLocalized(columns[2]),
-                                    'Actual Sold Price Per Unit (R$)': parseFloatLocalized(columns[3]),
-                                    'Total Actual Sold Price (R$)': parseFloatLocalized(columns[4]),
-                                    'Unit Cost at Sale (R$)': parseFloatLocalized(columns[5]),
-                                    'Suggested Selling Price Per Unit at Sale (R$)': parseFloatLocalized(columns[6]),
-                                    'Total Suggested Selling Price at Sale (R$)': parseFloatLocalized(columns[7]),
-                                    'Sale Date': parseString(columns[8])
-                                });
-                            } catch (e) { importErrors.push(`Erro na linha ${i + 1} (Vendas): ${e.message}. Linha: "${line}"`); }
-                        } else if (line !== "") { importErrors.push(`Formato inválido na linha ${i + 1} (Vendas). Esperado pelo menos 9 colunas. Linha: "${line}"`); }
-                    } else if (currentSection === 'CASH_MOVEMENTS') {
-                        if (columns.length === 5) {
-                            try {
-                                importedCashMovements.push({
-                                    'ID': parseString(columns[0]),
-                                    'Date': parseString(columns[1]),
-                                    'Type': parseString(columns[2]),
-                                    'Description': parseString(columns[3]),
-                                    'Amount (R$)': parseFloatLocalized(columns[4])
-                                });
-                            } catch (e) { importErrors.push(`Erro na linha ${i + 1} (Movimentações de Caixa): ${e.message}. Linha: "${line}"`); }
-                        } else if (line !== "") { importErrors.push(`Formato inválido na linha ${i + 1} (Movimentações de Caixa). Esperado 5 colunas. Linha: "${line}"`); }
-                    } else if (currentSection === 'WORKING_CAPITAL_ASSETS') {
-                        if (columns.length === 2) {
-                            try {
-                                importedOtherAssets.push({
-                                    'Description': parseString(columns[0]),
-                                    'Value (R$)': parseFloatLocalized(columns[1])
-                                });
-                            } catch (e) { importErrors.push(`Erro na linha ${i + 1} (Ativos de Capital de Giro): ${e.message}. Linha: "${line}"`); }
-                        } else if (line !== "") { importErrors.push(`Formato inválido na linha ${i + 1} (Ativos de Capital de Giro). Esperado 2 colunas. Linha: "${line}"`); }
-                    } else if (currentSection === 'WORKING_CAPITAL_LIABILITIES') {
-                        if (columns.length === 2) {
-                            try {
-                                importedLiabilities.push({
-                                    'Description': parseString(columns[0]),
-                                    'Value (R$)': parseFloatLocalized(columns[1])
-                                });
-                            } catch (e) { importErrors.push(`Erro na linha ${i + 1} (Passivos de Capital de Giro): ${e.message}. Linha: "${line}"`); }
-                        } else if (line !== "") { importErrors.push(`Formato inválido na linha ${i + 1} (Passivos de Capital de Giro). Esperado 2 colunas. Linha: "${line}"`); }
-                    }
-                }
-
-                if (importErrors.length > 0) {
-                    const errorSummary = importErrors.join('\n');
-                    showInfoModal('Erros encontrados durante a importação:\n\n' + errorSummary);
-                    return;
-                }
-
-                // Envia todos os dados importados para o Google Sheets
-                await sendDataToGoogleSheets('clearAllAndAdd', 'Products', importedProducts);
-                await sendDataToGoogleSheets('clearAllAndAdd', 'Sales', importedSales);
-                await sendDataToGoogleSheets('clearAllAndAdd', 'Cash Movements', importedCashMovements);
-                await sendDataToGoogleSheets('clearAllAndAdd', 'Working Capital - Assets', importedOtherAssets);
-                await sendDataToGoogleSheets('clearAllAndAdd', 'Working Capital - Liabilities', importedLiabilities);
-                
-                await sendDataToGoogleSheets('updateMarkup', 'Markup Data', {
-                    revenue: importedMarkupRevenue,
-                    profitMargin: importedMarkupProfitMargin
-                });
-                await sendDataToGoogleSheets('clearAndAdd', 'Variable Expenses', importedMarkupVariableExpensesDetails);
-                await sendDataToGoogleSheets('clearAndAdd', 'Fixed Expenses', importedMarkupFixedExpensesDetails);
-
-                await loadAllDataFromSheets();
-                showInfoModal('Dados importados e atualizados com sucesso no Google Sheets!');
+                processImportedCSVText(csvText); // Reutiliza a função de processamento
             };
-            reader.onerror = () => { showInfoModal('Erro ao ler o ficheiro.'); };
+
+            reader.onerror = () => {
+                showInfoModal('Erro ao ler o ficheiro.');
+            };
+
             reader.readAsText(file);
         });
 
+        // Nova função para carregar o CSV automaticamente
+        async function autoLoadUnifiedDataCSV() {
+            try {
+                const response = await fetch('dados_pdv_unificados.csv');
+                if (!response.ok) {
+                    console.warn('Arquivo "dados_pdv_unificados.csv" não encontrado ou erro ao carregar. Continuando sem importação automática.');
+                    return; // Não exibe erro modal se o arquivo não for encontrado
+                }
+                const csvText = await response.text();
+                processImportedCSVText(csvText);
+            } catch (error) {
+                console.error('Erro ao tentar carregar dados automaticamente:', error);
+                showInfoModal('Ocorreu um erro ao tentar carregar os dados automaticamente. Por favor, tente importar manualmente.');
+            }
+        }
+
+
         // --- Função para atualizar os campos de custo calculado na UI ---
-        /**
-         * Atualiza os campos de custo unitário e custo total do lote na UI.
-         */
         function updateCalculatedCosts() {
             const individualCost = parseFloat(individualProductCostInput.value) || 0;
-            const freightCost = parseFloat(freightCostPerUnitInput.value) || 0;
+            const freightCost = parseFloat(freightCostPerUnitInput.value) || 0; // Corrigido para freightCostPerUnitInput
             const quantity = parseInt(productQuantityInput.value) || 0;
 
             const calculatedUnitCost = individualCost + freightCost;
@@ -3028,38 +2988,58 @@
         }
 
         // --- Inicialização e Listeners ---
-        /**
-         * Ajusta o padding do corpo da página para acomodar o cabeçalho fixo.
-         */
         function adjustBodyPadding() {
             if (mainHeader) {
                 const headerHeight = mainHeader.offsetHeight;
-                document.body.style.paddingTop = `${headerHeight}px`;
+                document.body.style.paddingTop = `${headerHeight}px`; // Removido o buffer de 16px
             }
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            adjustBodyPadding();
-            // Carrega os dados iniciais do Google Sheets quando a página carrega
-            if (googleSheetsUrl && googleSheetsUrl !== 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
-                await loadAllDataFromSheets();
-            } else {
-                showInfoModal('Por favor, insira a URL do Google Apps Script na seção "Configuração do Google Sheets" para carregar ou salvar dados.');
+            adjustBodyPadding(); // Ajusta o padding na carga inicial
+            
+            // Tenta carregar os dados automaticamente do CSV
+            await autoLoadUnifiedDataCSV(); // Adicionado await para garantir que os dados sejam carregados antes de renderizar
+
+            renderProductList();
+            loadMarkupDataFromLocalStorage();
+            loadCashFlowRecordsFromLocalStorage(); // Load cash flow data
+            loadWorkingCapitalDetailsFromLocalStorage(); // Load working capital data
+            renderRecentSalesList();
+            populateProductDatalist();
+            showCalculator('markupCalculatorSection'); // Start on markup calculator
+
+            // Add new expense rows if none exist on load
+            if (variableExpensesList.children.length === 0) {
+                addVariableExpenseRow('Comissão de Vendas', '5.00');
+                addVariableExpenseRow('Impostos sobre Vendas', '10.00');
             }
+            if (fixedExpensesList.children.length === 0) {
+                addFixedExpenseRow('Aluguel', '1000.00');
+                addFixedExpenseRow('Salários', '2000.00');
+            }
+            if (otherCurrentAssetsList.children.length === 0) {
+                addOtherAssetRow('Contas a Receber', '0.00');
+            }
+            if (currentLiabilitiesList.children.length === 0) {
+                addLiabilityRow('Contas a Pagar', '0.00');
+            }
+
 
             individualProductCostInput.addEventListener('input', updateCalculatedCosts);
             freightCostPerUnitInput.addEventListener('input', updateCalculatedCosts);
             productQuantityInput.addEventListener('input', updateCalculatedCosts);
 
-            totalMonthlyRevenueInput.addEventListener('input', async () => {
-                await updateMarkupDataInSheets();
+            totalMonthlyRevenueInput.addEventListener('input', () => {
+                saveMarkupDataToLocalStorage();
                 calculateMarkup();
             });
-            profitMarginInput.addEventListener('input', async () => {
-                await updateMarkupDataInSheets();
+            profitMarginInput.addEventListener('input', () => {
+                saveMarkupDataToLocalStorage();
                 calculateMarkup();
             });
 
+            // Event listeners for toggle buttons
             document.querySelectorAll('.toggle-section-btn').forEach(button => {
                 const targetId = button.dataset.target;
                 const targetContent = document.getElementById(targetId);
@@ -3071,7 +3051,7 @@
             });
         });
 
-        window.addEventListener('resize', adjustBodyPadding);
+        window.addEventListener('resize', adjustBodyPadding); // Ajusta o padding ao redimensionar a janela
 
         hamburgerBtn.addEventListener('click', toggleMenu);
         sidebarOverlay.addEventListener('click', toggleMenu);
@@ -3103,16 +3083,8 @@
 
         calculateSellingPriceBtn.addEventListener('click', handleSellingPriceCalculation);
         importMarkupBtn.addEventListener('click', importMarkupFromCSV);
-        addVariableExpenseBtn.addEventListener('click', async () => {
-            await addVariableExpenseRow();
-            await updateMarkupDataInSheets();
-            calculateMarkup();
-        });
-        addFixedExpenseBtn.addEventListener('click', async () => {
-            await addFixedExpenseRow();
-            await updateMarkupDataInSheets();
-            calculateMarkup();
-        });
+        addVariableExpenseBtn.addEventListener('click', () => addVariableExpenseRow());
+        addFixedExpenseBtn.addEventListener('click', () => addFixedExpenseRow());
 
         clearMarkupDataBtn.addEventListener('click', clearMarkupData);
 
@@ -3137,6 +3109,7 @@
         });
 
         addItemToSaleBtn.addEventListener('click', addItemToCurrentSale);
+
         recordSaleBtn.addEventListener('click', handleRecordSale);
 
         salesModalBtn.addEventListener('click', showSalesModal);
@@ -3148,38 +3121,11 @@
         });
 
         addCashMovementBtn.addEventListener('click', addCashMovement);
-        addOtherAssetBtn.addEventListener('click', async () => {
-            await addOtherAssetRow();
-            await updateWorkingCapitalDetailsInSheets();
-            calculateWorkingCapital();
-        });
-        addLiabilityBtn.addEventListener('click', async () => {
-            await addLiabilityRow();
-            await updateWorkingCapitalDetailsInSheets();
-            calculateWorkingCapital();
-        });
+        addOtherAssetBtn.addEventListener('click', () => addOtherAssetRow());
+        addLiabilityBtn.addEventListener('click', () => addLiabilityRow());
 
         exportAllDataBtn.addEventListener('click', exportAllDataToCSV);
         importAllDataBtn.addEventListener('click', importAllDataFromCSV);
-
-        // Salva a URL e carrega os dados
-        saveSheetsUrlBtn.addEventListener('click', async () => {
-            const newUrl = googleSheetsUrlInput.value.trim();
-            if (newUrl) {
-                localStorage.setItem('googleSheetsUrl', newUrl);
-                googleSheetsUrl = newUrl;
-                await loadAllDataFromSheets();
-            } else {
-                displayError('Por favor, insira uma URL válida para o Google Apps Script.', googleSheetsErrorMessageDiv);
-            }
-        });
-
-        // Carregar URL do localStorage na inicialização
-        const savedUrl = localStorage.getItem('googleSheetsUrl');
-        if (savedUrl) {
-            googleSheetsUrl = savedUrl;
-            googleSheetsUrlInput.value = savedUrl;
-        }
     </script>
 </body>
 </html>
