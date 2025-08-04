@@ -299,6 +299,7 @@
                 </div>
 
                 <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mb-4">
+                    <!-- Importar Markup da Planilha (mantido para importação manual de markup específico) -->
                     <input type="file" id="importMarkupFile" accept=".csv" class="hidden">
                     <button id="importMarkupBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 transition duration-300 ease-in-out transform hover:scale-105">
                         Importar Markup da Planilha
@@ -921,187 +922,227 @@
         const recentSalesContent = document.getElementById('recentSalesContent');
 
 
-        // Inicializa 'products' a partir do LocalStorage ou como um array vazio
-        let products = JSON.parse(localStorage.getItem('pricingProducts')) || [];
-        // Inicializa 'salesRecords' a partir do LocalStorage ou como um array vazio
-        let salesRecords = JSON.parse(localStorage.getItem('salesRecords')) || [];
-        // Inicializa 'cashFlowRecords' a partir do LocalStorage ou como um array vazio
-        let cashFlowRecords = JSON.parse(localStorage.getItem('cashFlowRecords')) || [];
-        // Inicializa 'workingCapitalDetails' a partir do LocalStorage ou como um objeto vazio
-        let workingCapitalDetails = JSON.parse(localStorage.getItem('workingCapitalDetails')) || {
+        // Inicializa as variáveis de estado globais
+        let products = [];
+        let salesRecords = [];
+        let cashFlowRecords = [];
+        let workingCapitalDetails = {
             otherAssets: [],
             liabilities: []
+        };
+        let markupData = {
+            revenue: 0,
+            variableExpensesDetails: [],
+            fixedExpensesDetails: [],
+            profitMargin: 0
         };
 
         // Array temporário para guardar os itens da venda atual no modal
         let currentSaleItems = [];
 
-        // Lógica de migração de dados para garantir compatibilidade com versões anteriores
-        products = products.map(product => {
-            const newProduct = { ...product };
-
-            if (newProduct.individualCost === undefined || isNaN(newProduct.individualCost)) {
-                if (newProduct.totalCost !== undefined && newProduct.quantity !== undefined && newProduct.quantity > 0) {
-                    newProduct.individualCost = newProduct.totalCost / newProduct.quantity;
-                } else {
-                    newProduct.individualCost = 0;
-                }
-            }
-            if (newProduct.freightCost === undefined || isNaN(newProduct.freightCost)) {
-                newProduct.freightCost = 0;
-            }
-
-            if (newProduct.quantity === undefined || isNaN(newProduct.quantity) || newProduct.quantity < 0) {
-                newProduct.quantity = 1;
-            }
-            
-            newProduct.initialUnitCost = newProduct.individualCost + newProduct.freightCost;
-            newProduct.totalCost = newProduct.initialUnitCost * newProduct.quantity;
-
-            if (newProduct.markup === undefined || isNaN(newProduct.markup)) {
-                newProduct.markup = 0;
-            }
-            if (newProduct.sellingPricePerUnit === undefined || isNaN(newProduct.sellingPricePerUnit)) {
-                newProduct.sellingPricePerUnit = newProduct.initialUnitCost * newProduct.markup;
-            }
-            if (newProduct.actualSoldPrice === undefined || isNaN(newProduct.actualSoldPrice) || newProduct.actualSoldPrice < 0) {
-                newProduct.actualSoldPrice = newProduct.sellingPricePerUnit;
-            }
-
-            return newProduct;
-        });
-        saveProductsToLocalStorage();
-
-        // Lógica de migração para salesRecords
-        salesRecords = salesRecords.map(sale => {
-            const newSale = { ...sale };
-
-            if (newSale.actualSoldPricePerUnitAtSale === undefined && newSale.actualSoldPriceAtSale !== undefined) {
-                newSale.actualSoldPricePerUnitAtSale = newSale.actualSoldPriceAtSale;
-                newSale.totalActualSoldPriceAtSale = newSale.actualSoldPriceAtSale * newSale.quantitySold;
-                delete newSale.actualSoldPriceAtSale;
-            } else if (newSale.actualSoldPricePerUnitAtSale === undefined) {
-                newSale.actualSoldPricePerUnitAtSale = 0;
-                newSale.totalActualSoldPriceAtSale = 0;
-            }
-
-            if (newSale.suggestedSellingPricePerUnitAtSale === undefined && newSale.sellingPricePerUnitAtSale !== undefined) {
-                newSale.suggestedSellingPricePerUnitAtSale = newSale.sellingPricePerUnitAtSale;
-                newSale.totalSuggestedSellingPriceAtSale = newSale.sellingPricePerUnitAtSale * newSale.quantitySold;
-                delete newSale.sellingPricePerUnitAtSale;
-            } else if (newSale.suggestedSellingPricePerUnitAtSale === undefined) {
-                newSale.suggestedSellingPriceAtSale = 0;
-                newSale.totalSuggestedSellingPriceAtSale = 0;
-            }
-            
-            if (newSale.unitCostAtSale === undefined || isNaN(newSale.unitCostAtSale)) {
-                newSale.unitCostAtSale = 0;
-            }
-
-            if (newSale.transactionId === undefined) {
-                newSale.transactionId = 'legacy-' + Math.random().toString(36).substring(2, 9);
-            }
-
-            return newSale;
-        });
-        saveSalesRecordsToLocalStorage();
-
-
         let editingProductIndex = -1;
 
-        // --- Funções Auxiliares para LocalStorage ---
-        function saveProductsToLocalStorage() {
-            localStorage.setItem('pricingProducts', JSON.stringify(products));
-            populateProductDatalist();
-        }
+        // --- Funções para Salvar/Carregar Dados via PHP ---
 
-        function saveSalesRecordsToLocalStorage() {
-            localStorage.setItem('salesRecords', JSON.stringify(salesRecords));
-        }
-
-        function saveMarkupDataToLocalStorage() {
-            const variableExpenses = [];
-            document.querySelectorAll('#variableExpensesList .variable-expense-row').forEach(row => {
-                const description = row.querySelector('.variable-expense-description').value;
-                const amount = parseFloat(row.querySelector('.variable-expense-amount').value) || 0;
-                variableExpenses.push({ description, amount });
-            });
-
-            const fixedExpenses = [];
-            document.querySelectorAll('#fixedExpensesList .fixed-expense-row').forEach(row => {
-                const description = row.querySelector('.fixed-expense-description').value;
-                const amount = parseFloat(row.querySelector('.fixed-expense-amount').value) || 0;
-                fixedExpenses.push({ description, amount });
-            });
-
-            const markupData = {
-                revenue: parseFloat(totalMonthlyRevenueInput.value) || 0,
-                variableExpensesDetails: variableExpenses,
-                fixedExpensesDetails: fixedExpenses,
-                profitMargin: parseFloat(profitMarginInput.value) || 0
+        // Salva todos os dados para o servidor via PHP
+        async function saveAllDataToPHP() {
+            const allData = {
+                products: products,
+                salesRecords: salesRecords,
+                cashFlowRecords: cashFlowRecords,
+                workingCapitalDetails: workingCapitalDetails,
+                markupData: markupData
             };
-            localStorage.setItem('markupData', JSON.stringify(markupData));
-        }
 
-        function loadMarkupDataFromLocalStorage() {
-            const storedData = localStorage.getItem('markupData');
-            if (storedData) {
-                const markupData = JSON.parse(storedData);
+            try {
+                const response = await fetch('pdv_manager.php?action=save_data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(allData),
+                });
 
-                totalMonthlyRevenueInput.value = markupData.revenue.toFixed(2);
-                profitMarginInput.value = markupData.profitMargin.toFixed(2);
-
-                variableExpensesList.innerHTML = '';
-                fixedExpensesList.innerHTML = '';
-
-                if (markupData.variableExpensesDetails && markupData.variableExpensesDetails.length > 0) {
-                    markupData.variableExpensesDetails.forEach(exp => {
-                        addVariableExpenseRow(exp.description, exp.amount.toFixed(2));
-                    });
-                } else if (markupData.variableExpenses !== undefined) {
-                    addVariableExpenseRow('Total de Despesas Variáveis (Antigo)', markupData.variableExpenses.toFixed(2));
+                if (!response.ok) {
+                    throw new Error('Falha ao salvar os dados no servidor.');
                 }
-
-                if (markupData.fixedExpensesDetails && markupData.fixedExpensesDetails.length > 0) {
-                    markupData.fixedExpensesDetails.forEach(exp => {
-                        addFixedExpenseRow(exp.description, exp.amount.toFixed(2));
-                    });
-                } else if (markupData.fixedExpenses !== undefined) {
-                    addFixedExpenseRow('Total de Despesas Fixas (Antigo)', markupData.fixedExpenses.toFixed(2));
+                const result = await response.json();
+                if (result.success) {
+                    console.log('Dados salvos automaticamente:', result.message);
+                } else {
+                    console.error('Erro ao salvar dados automaticamente:', result.message);
+                    showInfoModal('Erro ao salvar dados automaticamente: ' + result.message);
                 }
-
-                calculateMarkup();
+            } catch (error) {
+                console.error('Erro de conexão ao salvar dados:', error);
+                showInfoModal('Erro de conexão ao salvar dados. Verifique o servidor PHP.');
             }
         }
 
-        function saveCashFlowRecordsToLocalStorage() {
-            localStorage.setItem('cashFlowRecords', JSON.stringify(cashFlowRecords));
-        }
+        // Carrega todos os dados do servidor via PHP
+        async function loadAllDataFromPHP() {
+            try {
+                const response = await fetch('pdv_manager.php?action=get_data');
+                if (!response.ok) {
+                    // Se o arquivo não existir ou houver um erro 404, inicializa com dados padrão
+                    if (response.status === 404) {
+                        console.warn('Arquivo de dados não encontrado no servidor. Inicializando com dados padrão.');
+                        initializeDefaultData(); // Inicializa com dados padrão
+                        return;
+                    }
+                    throw new Error('Falha ao carregar os dados do servidor.');
+                }
+                const serverData = await response.json();
 
-        function loadCashFlowRecordsFromLocalStorage() {
-            const storedData = localStorage.getItem('cashFlowRecords');
-            if (storedData) {
-                cashFlowRecords = JSON.parse(storedData);
+                // Aplica os dados carregados às variáveis globais
+                products = serverData.products || [];
+                salesRecords = serverData.sales || [];
+                cashFlowRecords = serverData.cashMovements || [];
+                workingCapitalDetails.otherAssets = serverData.workingCapitalAssets || [];
+                workingCapitalDetails.liabilities = serverData.workingCapitalLiabilities || [];
+                markupData.revenue = serverData.markupData.revenue || 0;
+                markupData.profitMargin = serverData.markupData.profitMargin || 0;
+                markupData.variableExpensesDetails = serverData.markupData.variableExpensesDetails || [];
+                markupData.fixedExpensesDetails = serverData.markupData.fixedExpensesDetails || [];
+
+                // Lógica de migração de dados para garantir compatibilidade com versões anteriores
+                // (Mantida aqui, mas pode ser movida para o backend PHP se preferir)
+                products = products.map(product => {
+                    const newProduct = { ...product };
+                    if (newProduct.individualCost === undefined || isNaN(newProduct.individualCost)) {
+                        if (newProduct.totalCost !== undefined && newProduct.quantity !== undefined && newProduct.quantity > 0) {
+                            newProduct.individualCost = newProduct.totalCost / newProduct.quantity;
+                        } else {
+                            newProduct.individualCost = 0;
+                        }
+                    }
+                    if (newProduct.freightCost === undefined || isNaN(newProduct.freightCost)) {
+                        newProduct.freightCost = 0;
+                    }
+                    if (newProduct.quantity === undefined || isNaN(newProduct.quantity) || newProduct.quantity < 0) {
+                        newProduct.quantity = 1;
+                    }
+                    newProduct.initialUnitCost = newProduct.individualCost + newProduct.freightCost;
+                    newProduct.totalCost = newProduct.initialUnitCost * newProduct.quantity;
+                    if (newProduct.markup === undefined || isNaN(newProduct.markup)) {
+                        newProduct.markup = 0;
+                    }
+                    if (newProduct.sellingPricePerUnit === undefined || isNaN(newProduct.sellingPricePerUnit)) {
+                        newProduct.sellingPricePerUnit = newProduct.initialUnitCost * newProduct.markup;
+                    }
+                    if (newProduct.actualSoldPrice === undefined || isNaN(newProduct.actualSoldPrice) || newProduct.actualSoldPrice < 0) {
+                        newProduct.actualSoldPrice = newProduct.sellingPricePerUnit;
+                    }
+                    return newProduct;
+                });
+
+                salesRecords = salesRecords.map(sale => {
+                    const newSale = { ...sale };
+                    if (newSale.actualSoldPricePerUnitAtSale === undefined && newSale.actualSoldPriceAtSale !== undefined) {
+                        newSale.actualSoldPricePerUnitAtSale = newSale.actualSoldPriceAtSale;
+                        newSale.totalActualSoldPriceAtSale = newSale.actualSoldPriceAtSale * newSale.quantitySold;
+                        delete newSale.actualSoldPriceAtSale;
+                    } else if (newSale.actualSoldPricePerUnitAtSale === undefined) {
+                        newSale.actualSoldPricePerUnitAtSale = 0;
+                        newSale.totalActualSoldPriceAtSale = 0;
+                    }
+                    if (newSale.suggestedSellingPricePerUnitAtSale === undefined && newSale.sellingPricePerUnitAtSale !== undefined) {
+                        newSale.suggestedSellingPricePerUnitAtSale = newSale.sellingPricePerUnitAtSale;
+                        newSale.totalSuggestedSellingPriceAtSale = newSale.sellingPricePerUnitAtSale * newSale.quantitySold;
+                        delete newSale.sellingPricePerUnitAtSale;
+                    } else if (newSale.suggestedSellingPricePerUnitAtSale === undefined) {
+                        newSale.suggestedSellingPriceAtSale = 0;
+                        newSale.totalSuggestedSellingPriceAtSale = 0;
+                    }
+                    if (newSale.unitCostAtSale === undefined || isNaN(newSale.unitCostAtSale)) {
+                        newSale.unitCostAtSale = 0;
+                    }
+                    if (newSale.transactionId === undefined) {
+                        newSale.transactionId = 'legacy-' + Math.random().toString(36).substring(2, 9);
+                    }
+                    return newSale;
+                });
+
+                // Atualiza a UI com os dados carregados
+                renderProductList();
+                updateMarkupUI(); // Nova função para preencher os campos de markup
                 renderCashMovements();
                 calculateCashBalance();
-            }
-        }
-
-        function saveWorkingCapitalDetailsToLocalStorage() {
-            localStorage.setItem('workingCapitalDetails', JSON.stringify(workingCapitalDetails));
-        }
-
-        function loadWorkingCapitalDetailsFromLocalStorage() {
-            const storedData = localStorage.getItem('workingCapitalDetails');
-            if (storedData) {
-                workingCapitalDetails = JSON.parse(storedData);
-                renderOtherCurrentAssets();
-                renderCurrentLiabilities();
+                renderOtherCurrentAssets(); // Renderiza os ativos
+                renderCurrentLiabilities(); // Renderiza os passivos
                 calculateWorkingCapital();
+                renderRecentSalesList();
+                populateProductDatalist();
+                updateCalculatedCosts(); // Atualiza os custos calculados na seção de produtos
+                generateReport(); // Gera o relatório inicial
+                console.log('Dados carregados do servidor com sucesso!');
+
+            } catch (error) {
+                console.error('Erro ao carregar dados:', error);
+                showInfoModal('Não foi possível carregar os dados do servidor. Verifique o console para mais detalhes.');
+                initializeDefaultData(); // Inicializa com dados padrão em caso de erro
             }
         }
 
-        // --- Funções para Exportar Dados ---
+        // Função para inicializar dados padrão se o CSV estiver vazio ou não existir
+        function initializeDefaultData() {
+            products = [];
+            salesRecords = [];
+            cashFlowRecords = [];
+            workingCapitalDetails = { otherAssets: [], liabilities: [] };
+            markupData = {
+                revenue: 0,
+                variableExpensesDetails: [
+                    { description: 'Comissão de Vendas', amount: 5.00 },
+                    { description: 'Impostos sobre Vendas', amount: 10.00 }
+                ],
+                fixedExpensesDetails: [
+                    { description: 'Aluguel', amount: 1000.00 },
+                    { description: 'Salários', amount: 2000.00 }
+                ],
+                profitMargin: 0
+            };
+            // Renderiza a UI com os dados padrão
+            updateMarkupUI();
+            renderProductList();
+            renderRecentSalesList();
+            renderCashMovements();
+            renderOtherCurrentAssets();
+            renderCurrentLiabilities();
+            calculateCashBalance();
+            calculateWorkingCapital();
+            populateProductDatalist();
+            generateReport();
+            saveAllDataToPHP(); // Salva os dados padrão para o PHP
+        }
+
+        // Função para preencher os campos de Markup na UI
+        function updateMarkupUI() {
+            totalMonthlyRevenueInput.value = markupData.revenue.toFixed(2);
+            profitMarginInput.value = markupData.profitMargin.toFixed(2);
+
+            variableExpensesList.innerHTML = '';
+            markupData.variableExpensesDetails.forEach(exp => {
+                addVariableExpenseRow(exp.description, exp.amount.toFixed(2));
+            });
+            updateTotalVariableExpenses(); // Recalcula o total após adicionar
+
+            fixedExpensesList.innerHTML = '';
+            markupData.fixedExpensesDetails.forEach(exp => {
+                addFixedExpenseRow(exp.description, exp.amount.toFixed(2));
+            });
+            updateTotalFixedExpenses(); // Recalcula o total após adicionar
+
+            calculateMarkup(); // Recalcula e exibe o markup
+        }
+
+
+        // --- Funções Auxiliares para LocalStorage (agora substituídas por PHP) ---
+        // As funções save/load do localStorage foram removidas.
+        // As chamadas a elas foram substituídas por saveAllDataToPHP() ou loadAllDataFromPHP().
+
+
+        // --- Funções para Exportar Dados (manual, para download) ---
         function exportMarkupCalculationToCSV() {
             const revenue = parseFloat(totalMonthlyRevenueInput.value) || 0;
             const profitM = parseFloat(profitMarginInput.value) || 0;
@@ -1142,15 +1183,14 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                // alert('Detalhes do Markup exportados com sucesso para detalhes_markup.csv!'); // Using custom modal now
+                URL.revokeObjectURL(url);
                 showInfoModal('Detalhes do Markup exportados com sucesso para detalhes_markup.csv!');
             } else {
-                // alert('O seu navegador não suporta a exportação direta de arquivos CSV. Por favor, copie o texto abaixo e cole numa planilha:\n\n' + csvContent); // Using custom modal now
                 showInfoModal('O seu navegador não suporta a exportação direta de arquivos CSV. Por favor, copie o texto abaixo e cole numa planilha:\n\n' + csvContent);
             }
         }
 
-        // --- Funções para Importar Dados ---
+        // --- Funções para Importar Dados (manual, para upload) ---
         function importMarkupFromCSV() {
             importMarkupFile.value = '';
             importMarkupFile.click();
@@ -1169,7 +1209,6 @@
                 const lines = csvText.split('\n').map(line => line.trim()).filter(line => line !== '');
 
                 if (lines.length < 1) {
-                    // alert('O ficheiro CSV está vazio ou não contém dados.'); // Using custom modal now
                     showInfoModal('O ficheiro CSV está vazio ou não contém dados.');
                     return;
                 }
@@ -1245,32 +1284,22 @@
 
                 if (importErrors.length > 0) {
                     const errorSummary = importErrors.join('\n');
-                    // alert('Erros encontrados na importação do Markup:\n\n' + errorSummary); // Using custom modal now
                     showInfoModal('Erros encontrados na importação do Markup:\n\n' + errorSummary);
                     return;
                 }
 
-                totalMonthlyRevenueInput.value = importedRevenue.toFixed(2);
-                profitMarginInput.value = importedProfitMargin.toFixed(2);
-                
-                variableExpensesList.innerHTML = '';
-                fixedExpensesList.innerHTML = '';
+                // Atualiza o objeto markupData global
+                markupData.revenue = importedRevenue;
+                markupData.profitMargin = importedProfitMargin;
+                markupData.variableExpensesDetails = importedVariableExpenses;
+                markupData.fixedExpensesDetails = importedFixedExpenses;
 
-                importedVariableExpenses.forEach(exp => {
-                    addVariableExpenseRow(exp.description, exp.amount.toFixed(2));
-                });
-
-                importedFixedExpenses.forEach(exp => {
-                    addFixedExpenseRow(exp.description, exp.amount.toFixed(2));
-                });
-
-                calculateMarkup();
-                // alert('Dados de Markup importados com sucesso e cálculo atualizado!'); // Using custom modal now
+                updateMarkupUI(); // Atualiza a UI e recalcula
                 showInfoModal('Dados de Markup importados com sucesso e cálculo atualizado!');
+                saveAllDataToPHP(); // Salva as alterações para o PHP
             };
 
             reader.onerror = () => {
-                // alert('Erro ao ler o ficheiro.'); // Using custom modal now
                 showInfoModal('Erro ao ler o ficheiro.');
             };
 
@@ -1381,18 +1410,18 @@
             
             amountInput.addEventListener('input', () => {
                 updateTotalFixedExpenses();
-                saveMarkupDataToLocalStorage();
+                updateMarkupDataFromUI(); // Atualiza markupData global
                 calculateMarkup();
             });
             descriptionInput.addEventListener('input', () => {
-                saveMarkupDataToLocalStorage();
+                updateMarkupDataFromUI(); // Atualiza markupData global
             });
 
             const removeButton = expenseDiv.querySelector('.remove-expense-btn');
             removeButton.addEventListener('click', () => {
                 fixedExpensesList.removeChild(expenseDiv);
                 updateTotalFixedExpenses();
-                saveMarkupDataToLocalStorage();
+                updateMarkupDataFromUI(); // Atualiza markupData global
                 calculateMarkup();
             });
             updateTotalFixedExpenses();
@@ -1422,18 +1451,18 @@
 
             amountInput.addEventListener('input', () => {
                 updateTotalVariableExpenses();
-                saveMarkupDataToLocalStorage();
+                updateMarkupDataFromUI(); // Atualiza markupData global
                 calculateMarkup();
             });
             descriptionInput.addEventListener('input', () => {
-                saveMarkupDataToLocalStorage();
+                updateMarkupDataFromUI(); // Atualiza markupData global
             });
 
             const removeButton = expenseDiv.querySelector('.remove-expense-btn');
             removeButton.addEventListener('click', () => {
                 variableExpensesList.removeChild(expenseDiv);
                 updateTotalVariableExpenses();
-                saveMarkupDataToLocalStorage();
+                updateMarkupDataFromUI(); // Atualiza markupData global
                 calculateMarkup();
             });
             updateTotalVariableExpenses();
@@ -1445,6 +1474,30 @@
                 total += parseFloat(input.value) || 0;
             });
             totalVariableExpensesAmountInput.value = total.toFixed(2);
+        }
+
+        // Nova função para atualizar o objeto markupData a partir da UI
+        function updateMarkupDataFromUI() {
+            const variableExpenses = [];
+            document.querySelectorAll('#variableExpensesList .variable-expense-row').forEach(row => {
+                const description = row.querySelector('.variable-expense-description').value;
+                const amount = parseFloat(row.querySelector('.variable-expense-amount').value) || 0;
+                variableExpenses.push({ description, amount });
+            });
+
+            const fixedExpenses = [];
+            document.querySelectorAll('#fixedExpensesList .fixed-expense-row').forEach(row => {
+                const description = row.querySelector('.fixed-expense-description').value;
+                const amount = parseFloat(row.querySelector('.fixed-expense-amount').value) || 0;
+                fixedExpenses.push({ description, amount });
+            });
+
+            markupData.revenue = parseFloat(totalMonthlyRevenueInput.value) || 0;
+            markupData.variableExpensesDetails = variableExpenses;
+            markupData.fixedExpensesDetails = fixedExpenses;
+            markupData.profitMargin = parseFloat(profitMarginInput.value) || 0;
+
+            saveAllDataToPHP(); // Salva as alterações
         }
 
         function calculateMarkup() {
@@ -1497,13 +1550,8 @@
 
             products.forEach(product => {
                 product.sellingPricePerUnit = product.initialUnitCost * markup;
-                // A linha abaixo não deve ser alterada aqui, pois o actualSoldPrice só é alterado na venda.
-                // if (product.actualSoldPrice === undefined || product.actualSoldPrice === 0) {
-                //     product.actualSoldPrice = product.sellingPricePerUnit;
-                // }
             });
-            saveProductsToLocalStorage();
-            renderProductList();
+            renderProductList(); // Re-renderiza a lista de produtos para atualizar preços sugeridos
 
             let logicHtml = `
                 <p class="mb-1">1. <strong>Despesas Variáveis em %:</strong> (Despesas Variáveis em R$ / Receita Mensal Total) * 100</p>
@@ -1517,7 +1565,7 @@
             `;
             calculationLogicDiv.innerHTML = logicHtml;
 
-            saveMarkupDataToLocalStorage();
+            saveAllDataToPHP(); // Salva as alterações
         }
 
         // --- Funções da Calculadora de Preço de Venda / Gestão de Produtos ---
@@ -1600,7 +1648,7 @@
                 calculatedTotalProductCostDisplay.value = '';
             }
             
-            saveProductsToLocalStorage();
+            saveAllDataToPHP(); // Salva as alterações
             renderProductList();
             searchProductInput.value = '';
 
@@ -1705,7 +1753,7 @@
                         const newValue = parseFloat(event.target.value);
                         if (!isNaN(newValue) && newValue >= 0) {
                             product.actualSoldPrice = newValue;
-                            saveProductsToLocalStorage();
+                            saveAllDataToPHP(); // Salva as alterações
                             renderProductList(); // Re-renderiza para atualizar a % de diferença
                         } else {
                             // Se o valor for inválido, reverte para o valor salvo
@@ -1744,11 +1792,10 @@
 
         function removeProductConfirmed(index) {
             products.splice(index, 1);
-            saveProductsToLocalStorage();
+            saveAllDataToPHP(); // Salva as alterações
             renderProductList();
             resetSellingPriceForm();
             searchProductInput.value = '';
-            // alert('Produto removido com sucesso!'); // Using custom modal now
             showInfoModal('Produto removido com sucesso!');
         }
 
@@ -1830,12 +1877,19 @@
                 markupErrorMessageDiv.classList.add('hidden');
                 markupErrorMessageDiv.textContent = '';
 
-                localStorage.removeItem('markupData');
+                // Limpa os dados no objeto global
+                markupData = {
+                    revenue: 0,
+                    variableExpensesDetails: [],
+                    fixedExpensesDetails: [],
+                    profitMargin: 0
+                };
+                
                 calculateMarkup();
                 markupMultiplierInput.value = '';
-                // alert('Dados da Calculadora de Markup limpos com sucesso!'); // Using custom modal now
                 showInfoModal('Dados da Calculadora de Markup limpos com sucesso!');
                 hideConfirmationModal();
+                saveAllDataToPHP(); // Salva as alterações
             });
         }
 
@@ -1986,8 +2040,6 @@
                     const product = products[productIndex];
                     product.quantity -= item.quantitySold;
                     product.totalCost = product.initialUnitCost * product.quantity;
-                    // Removido: product.actualSoldPrice = item.actualSoldPricePerUnitAtSale;
-                    // O valor de actualSoldPrice do produto base não será mais alterado pela venda.
 
                     salesRecords.push({
                         transactionId: transactionId,
@@ -2015,9 +2067,7 @@
                 }
             });
 
-            saveProductsToLocalStorage();
-            saveSalesRecordsToLocalStorage();
-            saveCashFlowRecordsToLocalStorage(); // Salva os registros de caixa
+            saveAllDataToPHP(); // Salva as alterações
             renderProductList();
             renderRecentSalesList();
             calculateCashBalance(); // Atualiza o saldo de caixa
@@ -2027,7 +2077,6 @@
             renderCurrentSaleItems();
             hideSalesModal();
 
-            // alert('Venda registrada com sucesso!'); // Using custom modal now
             showInfoModal('Venda registrada com sucesso!');
         }
 
@@ -2080,15 +2129,12 @@
                       movement.transactionId === removedSale.transactionId)
                 );
 
-                saveProductsToLocalStorage();
-                saveSalesRecordsToLocalStorage();
-                saveCashFlowRecordsToLocalStorage(); // Salva os registros de caixa atualizados
+                saveAllDataToPHP(); // Salva as alterações
                 renderProductList();
                 renderRecentSalesList();
                 calculateCashBalance(); // Recalcula o saldo de caixa
                 renderCashMovements(); // Atualiza a lista de movimentações de caixa
                 generateReport();
-                // alert('Venda removida e stock ajustado!'); // Using custom modal now
                 showInfoModal('Venda removida e stock ajustado!');
                 hideConfirmationModal();
             });
@@ -2162,7 +2208,7 @@
                 amount: amount
             });
 
-            saveCashFlowRecordsToLocalStorage();
+            saveAllDataToPHP(); // Salva as alterações
             renderCashMovements();
             calculateCashBalance();
 
@@ -2170,7 +2216,6 @@
             cashMovementTypeSelect.value = '';
             cashMovementDescriptionInput.value = '';
             cashMovementAmountInput.value = '';
-            // alert('Movimentação de caixa registrada com sucesso!'); // Using custom modal now
             showInfoModal('Movimentação de caixa registrada com sucesso!');
         }
 
@@ -2212,11 +2257,10 @@
         function removeCashMovement(id) {
             showConfirmationModal('Tem certeza que deseja remover esta movimentação de caixa? Isso afetará o saldo.', () => {
                 cashFlowRecords = cashFlowRecords.filter(movement => movement.id !== id);
-                saveCashFlowRecordsToLocalStorage();
+                saveAllDataToPHP(); // Salva as alterações
                 renderCashMovements();
                 calculateCashBalance();
                 generateReport();
-                // alert('Movimentação de caixa removida!'); // Using custom modal now
                 showInfoModal('Movimentação de caixa removida!');
                 hideConfirmationModal();
             });
@@ -2330,13 +2374,13 @@
 
             workingCapitalDetails.otherAssets = otherAssets;
             workingCapitalDetails.liabilities = liabilities;
-            saveWorkingCapitalDetailsToLocalStorage();
+            saveAllDataToPHP(); // Salva as alterações
         }
 
 
         // --- Funções do Relatório Geral ---
         function generateReport() {
-            if (products.length === 0 && salesRecords.length === 0 && cashFlowRecords.length === 0) {
+            if (products.length === 0 && salesRecords.length === 0 && cashFlowRecords.length === 0 && markupData.revenue === 0 && markupData.variableExpensesDetails.length === 0 && markupData.fixedExpensesDetails.length === 0 && workingCapitalDetails.otherAssets.length === 0 && workingCapitalDetails.liabilities.length === 0) {
                 totalProductsCountSpan.textContent = '0';
                 avgUnitCostSpan.textContent = 'R$ 0.00';
                 avgSuggestedSellingPriceSpan.textContent = 'R$ 0.00';
@@ -2459,92 +2503,77 @@
             totalStockPotentialProfitActualSpan.textContent = `R$ ${totalStockPotentialProfitActualValue.toFixed(2)}`;
 
             // --- Desempenho Geral do Markup ---
-            const storedMarkupData = JSON.parse(localStorage.getItem('markupData'));
-            if (storedMarkupData) {
-                const markupRevenue = storedMarkupData.revenue || 0;
-                const markupVarExp = storedMarkupData.variableExpensesDetails.reduce((sum, exp) => sum + exp.amount, 0);
-                const markupFixExp = storedMarkupData.fixedExpensesDetails.reduce((sum, exp) => sum + exp.amount, 0);
-                const markupProfitMargin = storedMarkupData.profitMargin || 0;
+            const markupRevenue = markupData.revenue || 0;
+            const markupVarExp = markupData.variableExpensesDetails.reduce((sum, exp) => sum + exp.amount, 0);
+            const markupFixExp = markupData.fixedExpensesDetails.reduce((sum, exp) => sum + exp.amount, 0);
+            const markupProfitMargin = markupData.profitMargin || 0;
 
-                markupReportRevenueSpan.textContent = `R$ ${markupRevenue.toFixed(2)}`;
-                markupReportVariableExpensesSpan.textContent = `R$ ${markupVarExp.toFixed(2)}`;
-                markupReportFixedExpensesSpan.textContent = `R$ ${markupFixExp.toFixed(2)}`;
-                markupReportProfitMarginSpan.textContent = `${markupProfitMargin.toFixed(2)}%`;
+            markupReportRevenueSpan.textContent = `R$ ${markupRevenue.toFixed(2)}`;
+            markupReportVariableExpensesSpan.textContent = `R$ ${markupVarExp.toFixed(2)}`;
+            markupReportFixedExpensesSpan.textContent = `R$ ${markupFixExp.toFixed(2)}`;
+            markupReportProfitMarginSpan.textContent = `${markupProfitMargin.toFixed(2)}%`;
 
-                // Recalcular o markup multiplicador para exibição, caso não esteja salvo diretamente
-                let calculatedMarkupMultiplier = 0;
-                if (markupRevenue > 0) {
-                    const varExpPerc = (markupVarExp / markupRevenue) * 100;
-                    const fixExpPerc = (markupFixExp / markupRevenue) * 100;
-                    const sumPerc = varExpPerc + fixExpPerc + markupProfitMargin;
-                    if (sumPerc < 100) {
-                        calculatedMarkupMultiplier = 100 / (100 - sumPerc);
-                    }
+            // Recalcular o markup multiplicador para exibição, caso não esteja salvo diretamente
+            let calculatedMarkupMultiplier = 0;
+            if (markupRevenue > 0) {
+                const varExpPerc = (markupVarExp / markupRevenue) * 100;
+                const fixExpPerc = (markupFixExp / markupRevenue) * 100;
+                const sumPerc = varExpPerc + fixExpPerc + markupProfitMargin;
+                if (sumPerc < 100) {
+                    calculatedMarkupMultiplier = 100 / (100 - sumPerc);
                 }
-                markupReportMarkupMultiplierSpan.textContent = calculatedMarkupMultiplier.toFixed(2);
-
-                // --- Ponto de Equilíbrio e Acompanhamento de Vendas ---
-                let breakEvenRevenueValue = 0;
-                if (markupRevenue > 0 && calculatedMarkupMultiplier > 0) {
-                    // Custo dos produtos como % da receita (implícito no markup)
-                    const cogsPercentage = (100 / calculatedMarkupMultiplier); // Ex: markup 2.0 -> 50% COGS
-                    const totalVariablePercentage = (markupVarExp / markupRevenue) * 100 + cogsPercentage;
-
-                    if (totalVariablePercentage < 100) {
-                        breakEvenRevenueValue = markupFixExp / (1 - (totalVariablePercentage / 100));
-                    } else {
-                        // Se a porcentagem variável total for >= 100%, o ponto de equilíbrio é inatingível
-                        breakEvenRevenueValue = Infinity;
-                    }
-                }
-                
-                breakEvenRevenueSpan.textContent = `R$ ${breakEvenRevenueValue !== Infinity ? breakEvenRevenueValue.toFixed(2) : 'Inatingível'}`;
-
-                // Acompanhamento em tempo real
-                currentSalesProgressSpan.textContent = `R$ ${totalRevenueFromActualSales.toFixed(2)}`;
-
-                let progressPercentage = 0;
-                if (breakEvenRevenueValue > 0 && breakEvenRevenueValue !== Infinity) {
-                    progressPercentage = (totalRevenueFromActualSales / breakEvenRevenueValue) * 100;
-                    if (progressPercentage > 100) progressPercentage = 100; // Limita a 100%
-                }
-
-                breakEvenProgressBar.style.width = `${progressPercentage.toFixed(2)}%`;
-                breakEvenProgressText.textContent = `${progressPercentage.toFixed(2)}%`;
-
-                if (progressPercentage >= 100) {
-                    breakEvenProgressBar.style.backgroundColor = '#4CAF50'; // Verde
-                    breakEvenProgressText.style.color = 'white';
-                } else if (progressPercentage > 50) {
-                    breakEvenProgressBar.style.backgroundColor = '#FFC107'; // Amarelo
-                    breakEvenProgressText.style.color = 'black';
-                } else {
-                    breakEvenProgressBar.style.backgroundColor = '#F44336'; // Vermelho
-                    breakEvenProgressText.style.color = 'white';
-                }
-                // Se a barra estiver muito estreita, o texto pode ficar fora
-                if (progressPercentage < 20 && progressPercentage > 0) { // Ajuste conforme necessário
-                    breakEvenProgressText.style.color = '#333'; // Texto fora da barra
-                    breakEvenProgressText.style.left = '50%';
-                    breakEvenProgressText.style.transform = 'translateX(-50%)';
-                } else {
-                    breakEvenProgressText.style.position = 'static';
-                    breakEvenProgressText.style.transform = 'none';
-                }
-
-
-            } else {
-                markupReportRevenueSpan.textContent = 'R$ 0.00';
-                markupReportVariableExpensesSpan.textContent = 'R$ 0.00';
-                markupReportFixedExpensesSpan.textContent = 'R$ 0.00';
-                markupReportProfitMarginSpan.textContent = '0.00%';
-                markupReportMarkupMultiplierSpan.textContent = '0.00';
-                breakEvenRevenueSpan.textContent = 'R$ 0.00';
-                breakEvenProgressBar.style.width = '0%';
-                breakEvenProgressBar.style.backgroundColor = '#e0e0e0';
-                breakEvenProgressText.textContent = '0.00%';
-                currentSalesProgressSpan.textContent = 'R$ 0.00';
             }
+            markupReportMarkupMultiplierSpan.textContent = calculatedMarkupMultiplier.toFixed(2);
+
+            // --- Ponto de Equilíbrio e Acompanhamento de Vendas ---
+            let breakEvenRevenueValue = 0;
+            if (markupRevenue > 0 && calculatedMarkupMultiplier > 0) {
+                // Custo dos produtos como % da receita (implícito no markup)
+                const cogsPercentage = (100 / calculatedMarkupMultiplier); // Ex: markup 2.0 -> 50% COGS
+                const totalVariablePercentage = (markupVarExp / markupRevenue) * 100 + cogsPercentage;
+
+                if (totalVariablePercentage < 100) {
+                    breakEvenRevenueValue = markupFixExp / (1 - (totalVariablePercentage / 100));
+                } else {
+                    // Se a porcentagem variável total for >= 100%, o ponto de equilíbrio é inatingível
+                    breakEvenRevenueValue = Infinity;
+                }
+            }
+            
+            breakEvenRevenueSpan.textContent = `R$ ${breakEvenRevenueValue !== Infinity ? breakEvenRevenueValue.toFixed(2) : 'Inatingível'}`;
+
+            // Acompanhamento em tempo real
+            currentSalesProgressSpan.textContent = `R$ ${totalRevenueFromActualSales.toFixed(2)}`;
+
+            let progressPercentage = 0;
+            if (breakEvenRevenueValue > 0 && breakEvenRevenueValue !== Infinity) {
+                progressPercentage = (totalRevenueFromActualSales / breakEvenRevenueValue) * 100;
+                if (progressPercentage > 100) progressPercentage = 100; // Limita a 100%
+            }
+
+            breakEvenProgressBar.style.width = `${progressPercentage.toFixed(2)}%`;
+            breakEvenProgressText.textContent = `${progressPercentage.toFixed(2)}%`;
+
+            if (progressPercentage >= 100) {
+                breakEvenProgressBar.style.backgroundColor = '#4CAF50'; // Verde
+                breakEvenProgressText.style.color = 'white';
+            } else if (progressPercentage > 50) {
+                breakEvenProgressBar.style.backgroundColor = '#FFC107'; // Amarelo
+                breakEvenProgressText.style.color = 'black';
+            } else {
+                breakEvenProgressBar.style.backgroundColor = '#F44336'; // Vermelho
+                breakEvenProgressText.style.color = 'white';
+            }
+            // Se a barra estiver muito estreita, o texto pode ficar fora
+            if (progressPercentage < 20 && progressPercentage > 0) { // Ajuste conforme necessário
+                breakEvenProgressText.style.color = '#333'; // Texto fora da barra
+                breakEvenProgressText.style.left = '50%';
+                breakEvenProgressText.style.transform = 'translateX(-50%)';
+            } else {
+                breakEvenProgressText.style.position = 'static';
+                breakEvenProgressText.style.transform = 'none';
+            }
+
 
             // --- Resumo de Caixa no Relatório ---
             const currentBalance = calculateCashBalance();
@@ -2569,7 +2598,7 @@
             reportCurrentLiabilitiesSpan.textContent = `R$ ${totalLiabilitiesReport.toFixed(2)}`;
         }
 
-        // --- Funções de Exportar/Importar Todos os Dados ---
+        // --- Funções de Exportar/Importar Todos os Dados (manuais) ---
         function exportAllDataToCSV() {
             let csvContent = "";
 
@@ -2609,19 +2638,17 @@
             csvContent += "\n";
 
             csvContent += "[MARKUP_DATA]\n";
-            const markupData = JSON.parse(localStorage.getItem('markupData'));
-            if (markupData) {
-                csvContent += `"Receita Mensal Estimada (R$)";${markupData.revenue.toFixed(2).replace('.', ',')}\n`;
-                csvContent += `"Margem de Lucro Desejada (%)";${markupData.profitMargin.toFixed(2).replace('.', ',')}\n`;
-                csvContent += "Despesas Variaveis Detalhadas;\n";
-                markupData.variableExpensesDetails.forEach(exp => {
-                    csvContent += `"${exp.description.replace(/"/g, '""')}";${exp.amount.toFixed(2).replace('.', ',')}\n`;
-                });
-                csvContent += "Despesas Fixas Detalhadas;\n";
-                markupData.fixedExpensesDetails.forEach(exp => {
-                    csvContent += `"${exp.description.replace(/"/g, '""')}";${exp.amount.toFixed(2).replace('.', ',')}\n`;
-                });
-            }
+            // Usa os dados do objeto global markupData
+            csvContent += `"Receita Mensal Estimada (R$)";${markupData.revenue.toFixed(2).replace('.', ',')}\n`;
+            csvContent += `"Margem de Lucro Desejada (%)";${markupData.profitMargin.toFixed(2).replace('.', ',')}\n`;
+            csvContent += "Despesas Variaveis Detalhadas;\n";
+            markupData.variableExpensesDetails.forEach(exp => {
+                csvContent += `"${exp.description.replace(/"/g, '""')}";${exp.amount.toFixed(2).replace('.', ',')}\n`;
+            });
+            csvContent += "Despesas Fixas Detalhadas;\n";
+            markupData.fixedExpensesDetails.forEach(exp => {
+                csvContent += `"${exp.description.replace(/"/g, '""')}";${exp.amount.toFixed(2).replace('.', ',')}\n`;
+            });
             csvContent += "\n";
 
 
@@ -2636,10 +2663,8 @@
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
-                // alert('Dados exportados com sucesso para dados_pdv_unificados.csv!'); // Using custom modal now
                 showInfoModal('Dados exportados com sucesso para dados_pdv_unificados.csv!');
             } else {
-                // alert('O seu navegador não suporta a exportação direta de arquivos CSV. Por favor, copie o texto abaixo e cole numa planilha:\n\n' + csvContent); // Using custom modal now
                 showInfoModal('O seu navegador não suporta a exportação direta de arquivos CSV. Por favor, copie o texto abaixo e cole numa planilha:\n\n' + csvContent);
             }
         }
@@ -2712,7 +2737,7 @@
                     }
                     continue;
                 } else if (line === "Despesas Variaveis Detalhadas;" && currentSection === 'MARKUP_DATA') {
-                    // Next lines are variable expenses until next section or empty line
+                    // This indicates a sub-section, read until next section or empty line
                     let j = i + 1;
                     while (lines[j] && !lines[j].startsWith("[") && lines[j].trim() !== "" && lines[j].trim() !== "Despesas Fixas Detalhadas;") {
                         const expCols = lines[j].split(';');
@@ -2730,7 +2755,7 @@
                     i = j - 1; // Adjust loop counter to the last processed line
                     continue;
                 } else if (line === "Despesas Fixas Detalhadas;" && currentSection === 'MARKUP_DATA') {
-                    // Next lines are fixed expenses until next section or empty line
+                    // This indicates a sub-section, read until next section or empty line
                     let j = i + 1;
                     while (lines[j] && !lines[j].startsWith("[") && lines[j].trim() !== "") {
                         const expCols = lines[j].split(';');
@@ -2903,21 +2928,12 @@
             workingCapitalDetails.liabilities = importedLiabilities;
 
             // Set markup data
-            const newMarkupData = {
-                revenue: importedMarkupRevenue,
-                profitMargin: importedMarkupProfitMargin,
-                variableExpensesDetails: importedMarkupVariableExpensesDetails,
-                fixedExpensesDetails: importedMarkupFixedExpensesDetails
-            };
-            localStorage.setItem('markupData', JSON.stringify(newMarkupData));
-
-
-            saveProductsToLocalStorage();
-            saveSalesRecordsToLocalStorage();
-            saveCashFlowRecordsToLocalStorage();
-            saveWorkingCapitalDetailsToLocalStorage();
+            markupData.revenue = importedMarkupRevenue;
+            markupData.profitMargin = importedMarkupProfitMargin;
+            markupData.variableExpensesDetails = importedMarkupVariableExpensesDetails;
+            markupData.fixedExpensesDetails = importedMarkupFixedExpensesDetails;
             
-            loadMarkupDataFromLocalStorage(); // Reload markup UI
+            updateMarkupUI(); // Recarrega a UI do markup
             renderProductList();
             renderRecentSalesList();
             renderCashMovements();
@@ -2927,6 +2943,7 @@
             calculateWorkingCapital();
             generateReport();
             showInfoModal('Dados importados e atualizados com sucesso!');
+            saveAllDataToPHP(); // Salva os dados importados para o PHP
         }
 
         function importAllDataFromCSV() {
@@ -2957,27 +2974,11 @@
             reader.readAsText(file);
         });
 
-        // Nova função para carregar o CSV automaticamente
-        async function autoLoadUnifiedDataCSV() {
-            try {
-                const response = await fetch('dados_pdv_unificados.csv');
-                if (!response.ok) {
-                    console.warn('Arquivo "dados_pdv_unificados.csv" não encontrado ou erro ao carregar. Continuando sem importação automática.');
-                    return; // Não exibe erro modal se o arquivo não for encontrado
-                }
-                const csvText = await response.text();
-                processImportedCSVText(csvText);
-            } catch (error) {
-                console.error('Erro ao tentar carregar dados automaticamente:', error);
-                showInfoModal('Ocorreu um erro ao tentar carregar os dados automaticamente. Por favor, tente importar manualmente.');
-            }
-        }
-
 
         // --- Função para atualizar os campos de custo calculado na UI ---
         function updateCalculatedCosts() {
             const individualCost = parseFloat(individualProductCostInput.value) || 0;
-            const freightCost = parseFloat(freightCostPerUnitInput.value) || 0; // Corrigido para freightCostPerUnitInput
+            const freightCost = parseFloat(freightCostPerUnitInput.value) || 0;
             const quantity = parseInt(productQuantityInput.value) || 0;
 
             const calculatedUnitCost = individualCost + freightCost;
@@ -2991,51 +2992,43 @@
         function adjustBodyPadding() {
             if (mainHeader) {
                 const headerHeight = mainHeader.offsetHeight;
-                document.body.style.paddingTop = `${headerHeight}px`; // Removido o buffer de 16px
+                document.body.style.paddingTop = `${headerHeight}px`;
             }
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            adjustBodyPadding(); // Ajusta o padding na carga inicial
+            adjustBodyPadding();
             
-            // Tenta carregar os dados automaticamente do CSV
-            await autoLoadUnifiedDataCSV(); // Adicionado await para garantir que os dados sejam carregados antes de renderizar
+            await loadAllDataFromPHP(); // Carrega os dados do PHP na inicialização
 
-            renderProductList();
-            loadMarkupDataFromLocalStorage();
-            loadCashFlowRecordsFromLocalStorage(); // Load cash flow data
-            loadWorkingCapitalDetailsFromLocalStorage(); // Load working capital data
-            renderRecentSalesList();
-            populateProductDatalist();
-            showCalculator('markupCalculatorSection'); // Start on markup calculator
-
-            // Add new expense rows if none exist on load
-            if (variableExpensesList.children.length === 0) {
+            // Adiciona linhas de despesas se não houver nenhuma após o carregamento
+            if (markupData.variableExpensesDetails.length === 0) {
                 addVariableExpenseRow('Comissão de Vendas', '5.00');
                 addVariableExpenseRow('Impostos sobre Vendas', '10.00');
             }
-            if (fixedExpensesList.children.length === 0) {
+            if (markupData.fixedExpensesDetails.length === 0) {
                 addFixedExpenseRow('Aluguel', '1000.00');
                 addFixedExpenseRow('Salários', '2000.00');
             }
-            if (otherCurrentAssetsList.children.length === 0) {
+            if (workingCapitalDetails.otherAssets.length === 0) {
                 addOtherAssetRow('Contas a Receber', '0.00');
             }
-            if (currentLiabilitiesList.children.length === 0) {
+            if (workingCapitalDetails.liabilities.length === 0) {
                 addLiabilityRow('Contas a Pagar', '0.00');
             }
 
+            showCalculator('markupCalculatorSection'); // Inicia na calculadora de markup
 
             individualProductCostInput.addEventListener('input', updateCalculatedCosts);
             freightCostPerUnitInput.addEventListener('input', updateCalculatedCosts);
             productQuantityInput.addEventListener('input', updateCalculatedCosts);
 
             totalMonthlyRevenueInput.addEventListener('input', () => {
-                saveMarkupDataToLocalStorage();
+                updateMarkupDataFromUI();
                 calculateMarkup();
             });
             profitMarginInput.addEventListener('input', () => {
-                saveMarkupDataToLocalStorage();
+                updateMarkupDataFromUI();
                 calculateMarkup();
             });
 
@@ -3051,7 +3044,7 @@
             });
         });
 
-        window.addEventListener('resize', adjustBodyPadding); // Ajusta o padding ao redimensionar a janela
+        window.addEventListener('resize', adjustBodyPadding);
 
         hamburgerBtn.addEventListener('click', toggleMenu);
         sidebarOverlay.addEventListener('click', toggleMenu);
